@@ -95,8 +95,10 @@ export default function Home() {
           <div className="glow" />
           <div className="logo-wrap">
             <div className="logo-icon">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-            </div>
+<svg width="18" height="18" viewBox="0 0 100 130" fill="none">
+  <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
+  <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
+</svg>            </div>
             <span className="logo-text">Veltro</span>
           </div>
           <h1 className="headline">Your inbox,<br/><span>intelligently organized</span></h1>
@@ -204,7 +206,10 @@ export default function Home() {
         <nav className="nav">
           <div className="nav-logo">
             <div className="nav-icon">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              <svg width="13" height="13" viewBox="0 0 100 130" fill="none">
+  <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
+  <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
+</svg>
             </div>
             <span className="nav-name">Veltro</span>
           </div>
