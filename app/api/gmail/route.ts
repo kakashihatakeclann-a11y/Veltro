@@ -40,6 +40,12 @@ export async function GET() {
       const msgData = await msgRes.json()
       const subject = msgData.payload?.headers?.find((h: any) => h.name === "Subject")?.value || "No Subject"
       const from = msgData.payload?.headers?.find((h: any) => h.name === "From")?.value || "Unknown"
+      const blockedSenders = ["noreply", "no-reply", "donotreply", "notifications", "mailer-daemon", "automated"]
+      const fromLower = from.toLowerCase()
+      const isBlocked = blockedSenders.some(blocked => fromLower.includes(blocked))
+
+      if (isBlocked) return null
+
       return {
         id: msg.id,
         subject,
@@ -49,5 +55,5 @@ export async function GET() {
     })
   )
 
-  return NextResponse.json({ emails })
+return NextResponse.json({ emails: emails.filter(Boolean) })
 }
