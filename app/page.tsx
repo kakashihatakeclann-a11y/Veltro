@@ -53,6 +53,7 @@ export default function Home() {
   };
 
   const totalTasks = emails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
+  const awaitingCount = emails.filter(e => e.awaitingReply).length;
   const isWorking = loading || analyzing;
 
   // ── LANDING PAGE ──────────────────────────────────────────────────
@@ -95,10 +96,11 @@ export default function Home() {
           <div className="glow" />
           <div className="logo-wrap">
             <div className="logo-icon">
-<svg width="18" height="18" viewBox="0 0 100 130" fill="none">
-  <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
-  <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
-</svg>            </div>
+              <svg width="18" height="18" viewBox="0 0 100 130" fill="none">
+                <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
+                <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
+              </svg>
+            </div>
             <span className="logo-text">Veltro</span>
           </div>
           <h1 className="headline">Your inbox,<br/><span>intelligently organized</span></h1>
@@ -128,7 +130,6 @@ export default function Home() {
 
         .dash { min-height: 100vh; background: #080808; font-family: 'DM Sans', sans-serif; color: #fff; }
 
-        /* NAV */
         .nav { border-bottom: 1px solid #141414; padding: 0.85rem 2rem; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: rgba(8,8,8,0.9); backdrop-filter: blur(12px); z-index: 10; }
         .nav-logo { display: flex; align-items: center; gap: 8px; }
         .nav-icon { width: 28px; height: 28px; border-radius: 7px; background: #534AB7; display: flex; align-items: center; justify-content: center; }
@@ -138,36 +139,29 @@ export default function Home() {
         .nav-signout { padding: 0.3rem 0.85rem; font-size: 0.78rem; border: 1px solid #1e1e1e; border-radius: 6px; background: transparent; color: #555; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: border-color 0.15s, color 0.15s; }
         .nav-signout:hover { border-color: #333; color: #888; }
 
-        /* MAIN */
         .main { max-width: 720px; margin: 0 auto; padding: 2.5rem 1.5rem; }
 
-        /* STAT CARDS */
-        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 2rem; }
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 2rem; }
         .stat { background: #0e0e0e; border: 1px solid #161616; border-radius: 12px; padding: 1.1rem 1.25rem; }
         .stat-num { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 700; line-height: 1; }
         .stat-label { font-size: 0.75rem; color: #444; margin-top: 4px; font-weight: 400; }
 
-        /* ORGANIZE BUTTON */
         .organize-btn { padding: 0.6rem 1.4rem; background: #fff; color: #000; border: none; border-radius: 8px; cursor: pointer; font-size: 0.88rem; font-weight: 500; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.1s; margin-bottom: 2rem; display: inline-flex; align-items: center; gap: 8px; }
         .organize-btn:hover:not(:disabled) { opacity: 0.88; transform: translateY(-1px); }
         .organize-btn:disabled { background: #1a1a1a; color: #444; cursor: not-allowed; transform: none; }
 
-        /* LOADING SPINNER */
         .spinner { width: 14px; height: 14px; border: 2px solid #333; border-top-color: #666; border-radius: 50%; animation: spin 0.7s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* EMPTY STATE */
         .empty { text-align: center; padding: 5rem 0; }
         .empty-icon { width: 48px; height: 48px; border-radius: 12px; background: #111; border: 1px solid #1a1a1a; display: flex; align-items: center; justify-content: center; margin: 0 auto 1rem; }
         .empty-text { font-size: 0.9rem; color: #333; }
 
-        /* SECTION HEADER */
         .section-head { display: flex; align-items: center; gap: 8px; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #111; }
         .section-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
         .section-label { font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #444; }
         .section-count { font-size: 0.7rem; color: #2a2a2a; background: #141414; padding: 1px 7px; border-radius: 999px; }
 
-        /* EMAIL CARD */
         .email-card { background: #0c0c0c; border: 1px solid #161616; border-radius: 12px; margin-bottom: 8px; overflow: hidden; transition: border-color 0.15s; cursor: pointer; }
         .email-card:hover { border-color: #222; }
         .email-card-inner { padding: 1rem 1.25rem; }
@@ -176,7 +170,8 @@ export default function Home() {
         .email-from { font-size: 0.75rem; color: #333; margin-bottom: 6px; }
         .email-snippet { font-size: 0.82rem; color: #555; line-height: 1.55; }
 
-        /* EXPANDED CONTENT */
+        .awaiting-badge { font-size: 0.7rem; color: #E24B4A; background: rgba(226,75,74,0.1); padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
+
         .email-expanded { padding: 0 1.25rem 1rem; border-top: 1px solid #111; margin-top: 0; }
         .divider { height: 1px; background: #111; margin-bottom: 0.75rem; }
         .summary-block { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 0.75rem; }
@@ -188,13 +183,10 @@ export default function Home() {
         .task-dot { width: 5px; height: 5px; border-radius: 50%; background: #EF9F27; flex-shrink: 0; margin-top: 6px; opacity: 0.6; }
         .task-text { font-size: 0.82rem; color: #666; line-height: 1.4; }
 
-        /* CAT BADGE */
         .cat-badge { font-size: 0.68rem; padding: 3px 8px; border-radius: 5px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
 
-        /* SECTION WRAP */
         .section-wrap { margin-bottom: 2rem; }
 
-        /* PROGRESS BAR */
         .progress-wrap { margin-bottom: 1.5rem; }
         .progress-label { font-size: 0.75rem; color: #333; margin-bottom: 6px; display: flex; justify-content: space-between; }
         .progress-bar { height: 3px; background: #111; border-radius: 999px; overflow: hidden; }
@@ -202,14 +194,13 @@ export default function Home() {
       `}</style>
 
       <div className="dash">
-        {/* NAV */}
         <nav className="nav">
           <div className="nav-logo">
             <div className="nav-icon">
               <svg width="13" height="13" viewBox="0 0 100 130" fill="none">
-  <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
-  <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
-</svg>
+                <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
+                <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
+              </svg>
             </div>
             <span className="nav-name">Veltro</span>
           </div>
@@ -221,13 +212,13 @@ export default function Home() {
 
         <div className="main">
 
-          {/* STAT CARDS — only show after emails loaded */}
           {emails.length > 0 && (
             <div className="stats">
               {([
                 ["Important", grouped["Important"].length, "#E24B4A"],
                 ["Action Needed", grouped["Action Needed"].length, "#EF9F27"],
                 ["Tasks Found", totalTasks, "#7F77DD"],
+                ["Awaiting Reply", awaitingCount, "#E24B4A"],
               ] as [string, number, string][]).map(([label, count, color]) => (
                 <div className="stat" key={label}>
                   <div className="stat-num" style={{ color }}>{count}</div>
@@ -237,7 +228,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* ANALYZING PROGRESS */}
           {analyzing && (
             <div className="progress-wrap">
               <div className="progress-label">
@@ -250,13 +240,11 @@ export default function Home() {
             </div>
           )}
 
-          {/* ORGANIZE BUTTON */}
           <button className="organize-btn" onClick={fetchAndAnalyze} disabled={isWorking}>
             {isWorking && <div className="spinner" />}
             {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Organize my inbox"}
           </button>
 
-          {/* EMPTY STATE */}
           {emails.length === 0 && !isWorking && (
             <div className="empty">
               <div className="empty-icon">
@@ -266,7 +254,6 @@ export default function Home() {
             </div>
           )}
 
-          {/* EMAIL SECTIONS */}
           {(["Important", "Action Needed", "Other"] as const).map((section) =>
             grouped[section].length > 0 && (
               <div className="section-wrap" key={section}>
@@ -297,6 +284,9 @@ export default function Home() {
                           )}
                         </div>
                         <p className="email-from">{email.from}</p>
+                        {email.awaitingReply && (
+                          <span className="awaiting-badge">⚠ No reply in 48h</span>
+                        )}
                         <p className="email-snippet">{email.snippet}</p>
                       </div>
 
