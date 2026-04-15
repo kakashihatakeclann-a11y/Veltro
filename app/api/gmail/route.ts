@@ -43,7 +43,7 @@ export async function GET() {
       const date = msgData.payload?.headers?.find((h: any) => h.name === "Date")?.value || null
       const threadId = msgData.threadId
 
-      const blockedSenders = ["noreply", "no-reply", "donotreply", "notifications", "mailer-daemon", "automated", "newsletter", "marketing", "news@", "updates@", "hello@em.", "mail@", "info@em."]
+      const blockedSenders = ["noreply", "no-reply", "donotreply", "notifications", "mailer-daemon", "automated", "newsletter", "marketing", "news@", "updates@", "hello@em.", "mail@", "info@em.", "uber", "mcdonalds", "maccas", "promotions", "deals", "offer", "discount", "unsubscribe"]
       const fromLower = from.toLowerCase()
       const isBlocked = blockedSenders.some(blocked => fromLower.includes(blocked))
 
