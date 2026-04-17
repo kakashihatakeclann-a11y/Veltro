@@ -181,18 +181,18 @@ export default function Home() {
         .email-card-inner { padding: 1rem 1.25rem; }
         .email-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 3px; }
         .email-subject { font-size: 0.88rem; font-weight: 500; color: #d0d0d0; line-height: 1.4; }
-        .email-from { font-size: 0.75rem; color: #333; margin-bottom: 6px; }
-        .email-snippet { font-size: 0.82rem; color: #555; line-height: 1.55; }
+        .email-from { font-size: 0.75rem; color: #666; margin-bottom: 6px; }
+        .email-snippet { font-size: 0.82rem; color: #999; line-height: 1.55; }
         .awaiting-badge { font-size: 0.7rem; color: #E24B4A; background: rgba(226,75,74,0.1); padding: 2px 8px; border-radius: 4px; display: inline-block; margin-bottom: 6px; }
         .email-expanded { padding: 0 1.25rem 1rem; border-top: 1px solid #111; margin-top: 0; }
         .divider { height: 1px; background: #111; margin-bottom: 0.75rem; }
         .summary-block { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 0.75rem; }
         .summary-icon { width: 16px; height: 16px; border-radius: 4px; background: rgba(127,119,221,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
-        .summary-text { font-size: 0.82rem; color: #777; line-height: 1.55; }
+        .summary-text { font-size: 0.82rem; color: #aaa; line-height: 1.55; }
         .tasks-title { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: #EF9F27; margin-bottom: 6px; }
         .task-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 5px; }
         .task-dot { width: 5px; height: 5px; border-radius: 50%; background: #EF9F27; flex-shrink: 0; margin-top: 6px; opacity: 0.6; }
-        .task-text { font-size: 0.82rem; color: #666; line-height: 1.4; }
+        .task-text { font-size: 0.82rem; color: #999; line-height: 1.4; }
         .cat-badge { font-size: 0.68rem; padding: 3px 8px; border-radius: 5px; font-weight: 500; white-space: nowrap; flex-shrink: 0; }
         .section-wrap { margin-bottom: 2rem; }
         .progress-wrap { margin-bottom: 1.5rem; }
@@ -203,7 +203,7 @@ export default function Home() {
         .activity-card { background: #0e0e0e; border: 1px solid #161616; border-radius: 12px; padding: 1.25rem; }
         .activity-num { font-family: 'Syne', sans-serif; font-size: 2.2rem; font-weight: 700; line-height: 1; color: #7F77DD; }
         .activity-label { font-size: 0.78rem; color: #444; margin-top: 6px; }
-        .activity-note { font-size: 0.78rem; color: #333; margin-top: 1.5rem; line-height: 1.6; background: #0e0e0e; border: 1px solid #161616; border-radius: 12px; padding: 1rem 1.25rem; }
+        .activity-note { font-size: 0.78rem; color: #666; margin-top: 1.5rem; line-height: 1.6; background: #0e0e0e; border: 1px solid #161616; border-radius: 12px; padding: 1rem 1.25rem; }
       `}</style>
 
       <div className="dash">
@@ -224,7 +224,6 @@ export default function Home() {
         </nav>
 
         <div className="main">
-
           <div className="tabs">
             <button className={`tab ${activeTab === "inbox" ? "active" : ""}`} onClick={() => setActiveTab("inbox")}>Inbox</button>
             <button className={`tab ${activeTab === "activity" ? "active" : ""}`} onClick={() => setActiveTab("activity")}>Activity</button>
@@ -304,7 +303,6 @@ export default function Home() {
                       <span className="section-label">{section}</span>
                       <span className="section-count">{grouped[section].length}</span>
                     </div>
-
                     {grouped[section].map((email, i) => {
                       const globalIdx = emails.indexOf(email);
                       const isOpen = expanded === globalIdx;
@@ -331,7 +329,6 @@ export default function Home() {
                             )}
                             <p className="email-snippet">{email.snippet}</p>
                           </div>
-
                           {isOpen && hasExtra && (
                             <div className="email-expanded">
                               <div className="divider" />
