@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 
 const cat = {
@@ -134,8 +134,11 @@ export default function Home() {
     setAnalyzing(false);
   };
 
-  useEffect(() => {
-    if (session && emails.length === 0) {
+  const hasLoaded = useRef(false);
+
+useEffect(() => {
+    if (session && !hasLoaded.current) {
+      hasLoaded.current = true;
       fetchAndAnalyze();
     }
   }, [session]);
@@ -384,7 +387,7 @@ export default function Home() {
                             )}
                             <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.snippet}</p>
                           </div>
-                          {isOpen && hasExtra && (
+                          {isOpen && (
                             <div style={{ padding: "0 1.25rem 1rem", borderTop: `1px solid ${d.divider}` }}>
                               <div style={{ height: "1px", background: d.divider, marginBottom: "0.75rem" }} />
                               {email.summary && (
