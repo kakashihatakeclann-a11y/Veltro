@@ -80,18 +80,26 @@ export default function Home() {
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
-      const updated = await Promise.all(
-        fetched.map(async (email: any) => {
-          const res = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ emailText: `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}` }),
-          });
-          const data = await res.json();
-          return { ...email, ...data };
-        })
+
+      const emailTexts = fetched.map((email: any) =>
+        `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`
       );
+
+      const analysisRes = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: emailTexts }),
+      });
+      const analysisData = await analysisRes.json();
+      const results = analysisData.results || [];
+
+      const updated = fetched.map((email: any, i: number) => ({
+        ...email,
+        ...results[i],
+      }));
+
       setEmails(updated);
+
       const newUsage = {
         analyzed: usage.analyzed + updated.length,
         tasks: usage.tasks + updated.reduce((acc: number, e: any) => acc + (e.tasks?.length || 0), 0),
@@ -99,10 +107,17 @@ export default function Home() {
       };
       setUsage(newUsage);
       localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
+
     } catch (err) { console.error(err); }
     setLoading(false);
     setAnalyzing(false);
   };
+
+  useEffect(() => {
+    if (session) {
+      fetchAndAnalyze();
+    }
+  }, [session]);
 
   const grouped = {
     "Important":     emails.filter(e => e.category === "Important"),
@@ -187,7 +202,6 @@ export default function Home() {
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1rem", color: d.text, letterSpacing: "-0.01em" }}>Veltro</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* THEME SWITCHER */}
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
               <button
                 onClick={() => toggleTheme("dark")}
@@ -294,7 +308,7 @@ export default function Home() {
               <button onClick={fetchAndAnalyze} disabled={isWorking} style={{ padding: "0.6rem 1.4rem", background: theme === "dark" ? "#fff" : "#111", color: theme === "dark" ? "#000" : "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: "2rem", display: "inline-flex", alignItems: "center", gap: "8px", opacity: isWorking ? 0.5 : 1 }}>
                 {isWorking && <div style={{ width: "14px", height: "14px", border: "2px solid #333", borderTopColor: "#666", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />}
                 <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Organize my inbox"}
+                {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Refresh inbox"}
               </button>
 
               {emails.length === 0 && !isWorking && (
@@ -302,7 +316,7 @@ export default function Home() {
                   <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: d.statBg, border: `1px solid ${d.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={d.emptyIcon} strokeWidth="1.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </div>
-                  <p style={{ fontSize: "0.9rem", color: d.textFaint }}>Hit "Organize my inbox" to get started</p>
+                  <p style={{ fontSize: "0.9rem", color: d.textFaint }}>Loading your inbox...</p>
                 </div>
               )}
 
