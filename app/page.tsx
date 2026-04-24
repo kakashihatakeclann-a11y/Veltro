@@ -24,8 +24,7 @@ export default function Home() {
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
     if (savedTheme) setTheme(savedTheme);
-    const savedUsage = localStorage.getItem("veltro_usage");
-    if (savedUsage) setUsage(JSON.parse(savedUsage));
+    localStorage.removeItem("veltro_usage");
   }, []);
 
   const toggleTheme = (t: "dark" | "light") => {
