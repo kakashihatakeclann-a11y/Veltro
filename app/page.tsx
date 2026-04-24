@@ -135,7 +135,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (session) {
+    if (session && emails.length === 0) {
       fetchAndAnalyze();
     }
   }, [session]);
@@ -236,7 +236,7 @@ export default function Home() {
               </button>
               <button className="theme-btn" onClick={() => toggleTheme("light")} title="Light theme"
                 style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "light" ? "#fffbe6" : "#1a1a1a", border: theme === "light" ? "2px solid #7F77DD" : "2px solid #333", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "light" ? "#f59e0b" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="5"/>
                   <line x1="12" y1="1" x2="12" y2="3"/>
                   <line x1="12" y1="21" x2="12" y2="23"/>
@@ -368,7 +368,7 @@ export default function Home() {
                       const hasExtra = email.summary || email.tasks?.length > 0;
                       return (
                         <div key={i} style={{ background: d.cardBg, border: `1px solid ${d.cardBorder}`, borderLeft: `2px solid ${cat[section].border}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
-                          onClick={() => hasExtra && setExpanded(isOpen ? null : globalIdx)}>
+                          onClick={() => setExpanded(isOpen ? null : globalIdx)}>
                           <div style={{ padding: "1rem 1.25rem" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "3px" }}>
                               <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text, lineHeight: 1.4 }}>{email.subject}</strong>
