@@ -17,6 +17,7 @@ export default function Home() {
   const [replyOpen, setReplyOpen] = useState<number | null>(null);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [generatingReply, setGeneratingReply] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"inbox" | "activity">("inbox");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
@@ -67,6 +68,27 @@ export default function Home() {
       localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
     } catch (err) { console.error(err); }
     setSending(false);
+  };
+
+  const generateReply = async (email: any, idx: number) => {
+    setGeneratingReply(idx);
+    setReplyOpen(idx);
+    setReplyText("");
+    try {
+      const res = await fetch("/api/reply", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: email.subject,
+          from: email.from,
+          snippet: email.snippet,
+          summary: email.summary || "",
+        }),
+      });
+      const data = await res.json();
+      setReplyText(data.reply || "");
+    } catch (err) { console.error(err); }
+    setGeneratingReply(null);
   };
 
   const fetchAndAnalyze = async () => {
@@ -185,6 +207,9 @@ export default function Home() {
         @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${d.bg}; transition: background 0.2s; }
+        .theme-btn { position: relative; }
+        .theme-btn:hover::after { content: attr(title); position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; font-size: 0.7rem; padding: 3px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; font-family: 'DM Sans', sans-serif; z-index: 99; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s" }}>
@@ -201,17 +226,28 @@ export default function Home() {
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1rem", color: d.text, letterSpacing: "-0.01em" }}>Veltro</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            {/* THEME SWITCHER */}
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-              <button
-                onClick={() => toggleTheme("dark")}
-                title="Dark mode"
-                style={{ width: "22px", height: "22px", borderRadius: "50%", background: "#080808", border: theme === "dark" ? "2px solid #7F77DD" : "2px solid #333", cursor: "pointer", transition: "border 0.15s" }}
-              />
-              <button
-                onClick={() => toggleTheme("light")}
-                title="Light mode"
-                style={{ width: "22px", height: "22px", borderRadius: "50%", background: "#f0f0f0", border: theme === "light" ? "2px solid #7F77DD" : "2px solid #ccc", cursor: "pointer", transition: "border 0.15s" }}
-              />
+              <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark theme"
+                style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "dark" ? "#1a1a2e" : "#e8e8e8", border: theme === "dark" ? "2px solid #7F77DD" : "2px solid #ccc", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#7F77DD" : "#999"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                </svg>
+              </button>
+              <button className="theme-btn" onClick={() => toggleTheme("light")} title="Light theme"
+                style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "light" ? "#fffbe6" : "#1a1a1a", border: theme === "light" ? "2px solid #7F77DD" : "2px solid #333", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "light" ? "#f59e0b" : "#555"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="5"/>
+                  <line x1="12" y1="1" x2="12" y2="3"/>
+                  <line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/>
+                  <line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                </svg>
+              </button>
             </div>
             <span style={{ fontSize: "0.82rem", color: d.textSub }}>{session.user?.email}</span>
             <button onClick={() => signOut()} style={{ padding: "0.3rem 0.85rem", fontSize: "0.78rem", border: `1px solid ${d.navBorder}`, borderRadius: "6px", background: "transparent", color: d.textMuted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
@@ -306,7 +342,6 @@ export default function Home() {
 
               <button onClick={fetchAndAnalyze} disabled={isWorking} style={{ padding: "0.6rem 1.4rem", background: theme === "dark" ? "#fff" : "#111", color: theme === "dark" ? "#000" : "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: "2rem", display: "inline-flex", alignItems: "center", gap: "8px", opacity: isWorking ? 0.5 : 1 }}>
                 {isWorking && <div style={{ width: "14px", height: "14px", border: "2px solid #333", borderTopColor: "#666", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />}
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
                 {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Refresh inbox"}
               </button>
 
@@ -371,15 +406,25 @@ export default function Home() {
                                   ))}
                                 </div>
                               )}
-                              <div style={{ marginTop: "0.75rem" }}>
+                              <div style={{ marginTop: "0.75rem" }} onClick={e => e.stopPropagation()}>
                                 {replyOpen === globalIdx ? (
-                                  <div onClick={e => e.stopPropagation()}>
+                                  <div>
+                                    {generatingReply === globalIdx && (
+                                      <div style={{ fontSize: "0.78rem", color: "#7F77DD", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                                        <div style={{ width: "10px", height: "10px", border: "2px solid #7F77DD", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                                        Generating reply...
+                                      </div>
+                                    )}
                                     <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Write your reply..."
                                       style={{ width: "100%", minHeight: "80px", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", color: d.text, fontSize: "0.82rem", padding: "0.6rem 0.75rem", fontFamily: "DM Sans, sans-serif", resize: "vertical", outline: "none" }} />
                                     <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
                                       <button onClick={() => sendReply(email, globalIdx)} disabled={sending || !replyText.trim()}
                                         style={{ padding: "0.4rem 1rem", background: "#534AB7", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: sending || !replyText.trim() ? 0.5 : 1 }}>
                                         {sending ? "Sending..." : "Send"}
+                                      </button>
+                                      <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
+                                        style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
+                                        ✨ AI Draft
                                       </button>
                                       <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
                                         style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
@@ -388,10 +433,16 @@ export default function Home() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <button onClick={e => { e.stopPropagation(); setReplyOpen(globalIdx); }}
-                                    style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#534AB7", border: "1px solid #534AB7", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                                    ↩ Reply
-                                  </button>
+                                  <div style={{ display: "flex", gap: "8px" }}>
+                                    <button onClick={() => { setReplyOpen(globalIdx); setReplyText(""); }}
+                                      style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#534AB7", border: "1px solid #534AB7", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
+                                      ↩ Reply
+                                    </button>
+                                    <button onClick={() => generateReply(email, globalIdx)}
+                                      style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
+                                      ✨ AI Reply
+                                    </button>
+                                  </div>
                                 )}
                               </div>
                             </div>
