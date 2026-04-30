@@ -24,9 +24,6 @@ export async function GET() {
 
   const data = await res.json()
   const messageIds = data.messages || []
-
-  const blockedSenders = ["noreply", "no-reply", "donotreply", "notifications", "mailer-daemon", "automated", "newsletter", "marketing", "news@", "updates@", "hello@em.", "mail@", "info@em.", "uber", "mcdonalds", "maccas", "promotions", "deals", "offer", "discount", "unsubscribe"]
-
   const emails = []
 
   for (const msg of messageIds) {
@@ -44,8 +41,6 @@ export async function GET() {
       const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject"
       const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
       const date = headers.find((h: any) => h.name === "Date")?.value || null
-
-      if (blockedSenders.some(b => from.toLowerCase().includes(b))) continue
 
       emails.push({
         id: msg.id,
