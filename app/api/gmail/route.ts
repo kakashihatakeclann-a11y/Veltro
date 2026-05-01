@@ -14,7 +14,7 @@ export async function GET() {
   }
 
   const res = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=100",
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20",
     { headers: { Authorization: `Bearer ${accessToken}` } }
   )
 
