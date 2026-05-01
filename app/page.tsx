@@ -356,8 +356,33 @@ useEffect(() => {
                   <p style={{ fontSize: "0.9rem", color: d.textFaint }}>Loading your inbox...</p>
                 </div>
               )}
+              {/* AT RISK SECTION */}
+{emails.filter(e => e.riskLevel === "high").length > 0 && (
+  <div style={{ marginBottom: "2rem" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#E24B4A", flexShrink: 0 }} />
+      <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#E24B4A" }}>⚠ At Risk</span>
+      <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{emails.filter(e => e.riskLevel === "high").length}</span>
+    </div>
+    {emails.filter(e => e.riskLevel === "high").map((email, i) => (
+      <div key={i} style={{ background: "rgba(226,75,74,0.05)", border: "1px solid rgba(226,75,74,0.3)", borderLeft: "3px solid #E24B4A", borderRadius: "12px", marginBottom: "8px", padding: "1rem 1.25rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "4px" }}>
+          <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text }}>{email.subject}</strong>
+          <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
+        </div>
+        <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
+        {email.deadline && (
+          <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>
+        )}
+        {email.awaitingReply && (
+          <p style={{ fontSize: "0.75rem", color: "#E24B4A", marginTop: "4px" }}>⚠ No reply sent</p>
+        )}
+      </div>
+    ))}
+  </div>
+)}
 
-              {(["Important", "Action Needed", "Other"] as const).map((section) =>
+             {(["Important", "Action Needed", "Other"] as const).map((section) =>
                 grouped[section].length > 0 && (
                   <div key={section} style={{ marginBottom: "2rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
