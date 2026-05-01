@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
         },
         { role: "user", content: numbered }
       ],
-      max_tokens: 2000
+      max_tokens: 4000
     });
     const raw = completion.choices[0].message.content || "[]";
     const result = JSON.parse(raw);
