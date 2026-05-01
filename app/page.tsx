@@ -21,6 +21,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"inbox" | "activity">("inbox");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
+  const [showUpgrade, setShowUpgrade] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -78,12 +79,7 @@ export default function Home() {
       const res = await fetch("/api/reply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: email.subject,
-          from: email.from,
-          snippet: email.snippet,
-          summary: email.summary || "",
-        }),
+        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, summary: email.summary || "" }),
       });
       const data = await res.json();
       setReplyText(data.reply || "");
@@ -101,11 +97,7 @@ export default function Home() {
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
-
-      const emailTexts = fetched.map((email: any) =>
-        `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`
-      );
-
+      const emailTexts = fetched.map((email: any) => `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`);
       const analysisRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -113,14 +105,8 @@ export default function Home() {
       });
       const analysisData = await analysisRes.json();
       const results = analysisData.results || [];
-
-      const updated = fetched.map((email: any, i: number) => ({
-        ...email,
-        ...results[i],
-      }));
-
+      const updated = fetched.map((email: any, i: number) => ({ ...email, ...results[i] }));
       setEmails(updated);
-
       const newUsage = {
         analyzed: usage.analyzed + updated.length,
         tasks: usage.tasks + updated.reduce((acc: number, e: any) => acc + (e.tasks?.length || 0), 0),
@@ -128,15 +114,13 @@ export default function Home() {
       };
       setUsage(newUsage);
       localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
-
     } catch (err) { console.error(err); }
     setLoading(false);
     setAnalyzing(false);
   };
 
   const hasLoaded = useRef(false);
-
-useEffect(() => {
+  useEffect(() => {
     if (session && !hasLoaded.current) {
       hasLoaded.current = true;
       fetchAndAnalyze();
@@ -151,6 +135,7 @@ useEffect(() => {
 
   const totalTasks = emails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
   const awaitingCount = emails.filter(e => e.awaitingReply).length;
+  const atRiskEmails = emails.filter(e => e.riskLevel === "high");
   const isWorking = loading || analyzing;
 
   if (!session) {
@@ -190,7 +175,7 @@ useEffect(() => {
           <h1 className="headline">Your inbox,<br/><span>intelligently organized</span></h1>
           <p className="subhead">Connect Gmail and let AI categorize, summarize, and extract tasks from your emails — automatically.</p>
           <div className="pills">
-            {["AI Categorization", "Task Extraction", "Smart Summaries", "Priority Ranking"].map(l => (
+            {["AI Categorization", "Task Extraction", "Smart Summaries", "Deadline Alerts"].map(l => (
               <div key={l} className="pill">{l}</div>
             ))}
           </div>
@@ -198,7 +183,11 @@ useEffect(() => {
             <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Sign in with Google
           </button>
-          <p className="trust">Read-only access · Your data is never stored</p> <div style={{ marginTop: "1rem", display: "flex", gap: "16px" }}>   <a href="/privacy" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Privacy Policy</a>   <a href="/terms" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Terms of Service</a> </div>
+          <p className="trust">Read-only access · Your data is never stored</p>
+          <div style={{ marginTop: "1rem", display: "flex", gap: "16px" }}>
+            <a href="/privacy" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Privacy Policy</a>
+            <a href="/terms" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Terms of Service</a>
+          </div>
         </div>
       </>
     );
@@ -215,7 +204,7 @@ useEffect(() => {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s" }}>
+      <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s", paddingBottom: "70px" }}>
 
         {/* NAV */}
         <nav style={{ borderBottom: `1px solid ${d.navBorder}`, padding: "0.85rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: d.navBg, backdropFilter: "blur(12px)", zIndex: 10 }}>
@@ -229,26 +218,18 @@ useEffect(() => {
             <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1rem", color: d.text, letterSpacing: "-0.01em" }}>Veltro</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            {/* THEME SWITCHER */}
             <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
               <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark theme"
                 style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "dark" ? "#1a1a2e" : "#e8e8e8", border: theme === "dark" ? "2px solid #7F77DD" : "2px solid #ccc", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#7F77DD" : "#999"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#7F77DD" : "#999"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               </button>
               <button className="theme-btn" onClick={() => toggleTheme("light")} title="Light theme"
                 style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "light" ? "#fffbe6" : "#1a1a1a", border: theme === "light" ? "2px solid #7F77DD" : "2px solid #333", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5"/>
-                  <line x1="12" y1="1" x2="12" y2="3"/>
-                  <line x1="12" y1="21" x2="12" y2="23"/>
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-                  <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-                  <line x1="1" y1="12" x2="3" y2="12"/>
-                  <line x1="21" y1="12" x2="23" y2="12"/>
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-                  <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                  <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                  <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
                 </svg>
               </button>
             </div>
@@ -286,14 +267,14 @@ useEffect(() => {
                 ))}
               </div>
               <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem" }}>
-                Activity is saved across sessions. Upgrade to Pro to unlock unlimited analysis and full history.
+                Upgrade to Pro to unlock unlimited analysis, At Risk alerts, and full history.
               </div>
               {usage.analyzed > 0 && (
                 <div style={{ marginTop: "1.5rem", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.25rem" }}>
                   <div style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: d.textFaint, marginBottom: "1rem" }}>Session breakdown</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                     {[
-                      { label: "Emails analyzed", val: usage.analyzed, max: 15, color: "#7F77DD" },
+                      { label: "Emails analyzed", val: usage.analyzed, max: 20, color: "#7F77DD" },
                       { label: "Tasks extracted", val: usage.tasks, max: Math.max(usage.tasks, 1), color: "#EF9F27" },
                       { label: "Replies sent", val: usage.replies, max: Math.max(usage.replies, 1), color: "#E24B4A" },
                     ].map(({ label, val, max, color }) => (
@@ -321,7 +302,7 @@ useEffect(() => {
                     ["Important", grouped["Important"].length, "#E24B4A"],
                     ["Action Needed", grouped["Action Needed"].length, "#EF9F27"],
                     ["Tasks Found", totalTasks, "#7F77DD"],
-                    ["Awaiting Reply", awaitingCount, "#E24B4A"],
+                    ["At Risk", atRiskEmails.length, "#E24B4A"],
                   ] as [string, number, string][]).map(([label, count, color]) => (
                     <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.1rem 1.25rem" }}>
                       <div style={{ fontSize: "1.8rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{count}</div>
@@ -356,33 +337,31 @@ useEffect(() => {
                   <p style={{ fontSize: "0.9rem", color: d.textFaint }}>Loading your inbox...</p>
                 </div>
               )}
-              {/* AT RISK SECTION */}
-{emails.filter(e => e.riskLevel === "high").length > 0 && (
-  <div style={{ marginBottom: "2rem" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
-      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#E24B4A", flexShrink: 0 }} />
-      <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#E24B4A" }}>⚠ At Risk</span>
-      <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{emails.filter(e => e.riskLevel === "high").length}</span>
-    </div>
-    {emails.filter(e => e.riskLevel === "high").map((email, i) => (
-      <div key={i} style={{ background: "rgba(226,75,74,0.05)", border: "1px solid rgba(226,75,74,0.3)", borderLeft: "3px solid #E24B4A", borderRadius: "12px", marginBottom: "8px", padding: "1rem 1.25rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "4px" }}>
-          <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text }}>{email.subject}</strong>
-          <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
-        </div>
-        <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
-        {email.deadline && (
-          <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>
-        )}
-        {email.awaitingReply && (
-          <p style={{ fontSize: "0.75rem", color: "#E24B4A", marginTop: "4px" }}>⚠ No reply sent</p>
-        )}
-      </div>
-    ))}
-  </div>
-)}
 
-             {(["Important", "Action Needed", "Other"] as const).map((section) =>
+              {/* AT RISK SECTION */}
+              {atRiskEmails.length > 0 && (
+                <div style={{ marginBottom: "2rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#E24B4A", flexShrink: 0 }} />
+                    <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#E24B4A" }}>⚠ At Risk</span>
+                    <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{atRiskEmails.length}</span>
+                  </div>
+                  {atRiskEmails.map((email, i) => (
+                    <div key={i} style={{ background: "rgba(226,75,74,0.05)", border: "1px solid rgba(226,75,74,0.3)", borderLeft: "3px solid #E24B4A", borderRadius: "12px", marginBottom: "8px", padding: "1rem 1.25rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "4px" }}>
+                        <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text }}>{email.subject}</strong>
+                        <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
+                      </div>
+                      <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
+                      {email.deadline && <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>}
+                      {email.awaitingReply && <p style={{ fontSize: "0.75rem", color: "#E24B4A", marginTop: "4px" }}>⚠ No reply sent</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* EMAIL SECTIONS */}
+              {(["Important", "Action Needed", "Other"] as const).map((section) =>
                 grouped[section].length > 0 && (
                   <div key={section} style={{ marginBottom: "2rem" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
@@ -393,7 +372,6 @@ useEffect(() => {
                     {grouped[section].map((email, i) => {
                       const globalIdx = emails.indexOf(email);
                       const isOpen = expanded === globalIdx;
-                      const hasExtra = email.summary || email.tasks?.length > 0;
                       return (
                         <div key={i} style={{ background: d.cardBg, border: `1px solid ${d.cardBorder}`, borderLeft: `2px solid ${cat[section].border}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
                           onClick={() => setExpanded(isOpen ? null : globalIdx)}>
@@ -484,6 +462,61 @@ useEffect(() => {
             </>
           )}
         </div>
+
+        {/* UPGRADE BAR */}
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme === "dark" ? "rgba(8,8,8,0.95)" : "rgba(255,255,255,0.95)", borderTop: `1px solid ${d.navBorder}`, padding: "0.75rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20, backdropFilter: "blur(12px)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", color: "#fff", fontWeight: 700 }}>
+              {session.user?.email?.[0]?.toUpperCase()}
+            </div>
+            <div>
+              <div style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
+              <div style={{ fontSize: "0.68rem", color: d.textSub }}>Free plan · 20 emails/day</div>
+            </div>
+          </div>
+          <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.45rem 1.1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(83,74,183,0.4)" }}>
+            Upgrade to Pro ✨
+          </button>
+        </div>
+
+        {/* UPGRADE POPUP */}
+        {showUpgrade && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} onClick={() => setShowUpgrade(false)}>
+            <div style={{ background: theme === "dark" ? "#0c0c0c" : "#fff", border: `1px solid ${d.cardBorder}`, borderRadius: "20px", padding: "2rem", maxWidth: "380px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+              <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
+                <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
+                  <svg width="20" height="20" viewBox="0 0 100 130" fill="none">
+                    <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#fff"/>
+                  </svg>
+                </div>
+                <div style={{ fontSize: "1.4rem", fontWeight: 700, color: d.text, fontFamily: "'Syne', sans-serif", marginBottom: "0.25rem" }}>Veltro Pro</div>
+                <div style={{ fontSize: "0.85rem", color: d.textSub, marginBottom: "1rem" }}>Never miss a client deadline again</div>
+                <div style={{ fontSize: "2.2rem", fontWeight: 800, color: "#7F77DD", letterSpacing: "-0.02em" }}>NZ$9.99<span style={{ fontSize: "1rem", fontWeight: 400, color: d.textSub }}>/month</span></div>
+              </div>
+              <div style={{ marginBottom: "1.5rem" }}>
+                {[
+                  { icon: "⚠️", text: "At Risk deadline alerts — know before you miss" },
+                  { icon: "📧", text: "Unlimited email analysis every day" },
+                  { icon: "✨", text: "AI reply drafts in your voice" },
+                  { icon: "🎯", text: "Smarter priority categorization" },
+                ].map(({ icon, text }) => (
+                  <div key={text} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "0.85rem" }}>
+                    <span style={{ fontSize: "1.1rem" }}>{icon}</span>
+                    <span style={{ fontSize: "0.85rem", color: d.text }}>{text}</span>
+                  </div>
+                ))}
+              </div>
+              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", textAlign: "center", padding: "0.85rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", borderRadius: "12px", textDecoration: "none", fontWeight: 600, fontSize: "0.95rem", boxShadow: "0 4px 16px rgba(83,74,183,0.4)" }}>
+                Upgrade Now →
+              </a>
+              <button onClick={() => setShowUpgrade(false)} style={{ display: "block", width: "100%", marginTop: "0.75rem", padding: "0.5rem", background: "transparent", color: d.textSub, border: "none", cursor: "pointer", fontSize: "0.82rem", fontFamily: "'DM Sans', sans-serif" }}>
+                Maybe later
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   );
