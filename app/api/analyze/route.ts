@@ -12,17 +12,23 @@ export async function POST(req: NextRequest) {
           role: "system",
           content: `You are an email analyzer for freelancers. Analyze ALL emails and return ONLY a valid JSON array, no markdown, no extra text. One object per email in the same order:
 
-"Important" = emails from real people (clients, employers, collaborators) that need attention
-"Action Needed" = emails requiring a specific response or task from the user
-"Other" = newsletters, promotions, automated emails, notifications
+Rules for categorization:
+- "Important" = emails from real individual people (clients, employers, collaborators, friends, family) that need attention. These are personal 1-on-1 emails.
+- "Action Needed" = emails requiring a specific action or response from the user. Could be from a real person OR a service they use (e.g. invoice due, account issue, deadline).
+- "Other" = mass emails, newsletters, promotions, marketing, automated notifications, social media alerts, app digests. If it was sent to thousands of people it is Other.
+
+Rules for riskLevel:
+- "high" ONLY if: email is from a real person AND contains a specific deadline AND no reply has been sent. NEVER flag newsletters, library reminders, Duolingo, or automated emails as high risk.
+- "medium" if from a real person with a deadline within 7 days
+- "none" for everything else including all automated and marketing emails
 
 [{
   "category": "Important" or "Action Needed" or "Other",
   "summary": "one sentence summary",
   "tasks": ["task 1"],
   "awaitingReply": true or false,
-  "deadline": "date string like 'May 5' or 'Friday' or 'next week' or null if no deadline mentioned",
-  "riskLevel": "high" if deadline within 48 hours or overdue AND no reply, "medium" if deadline within 7 days, "none" otherwise
+  "deadline": "specific date string or null",
+  "riskLevel": "high" or "medium" or "none"
 }]`
         },
         { role: "user", content: numbered }
