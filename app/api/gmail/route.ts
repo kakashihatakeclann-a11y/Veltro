@@ -41,12 +41,13 @@ export async function GET() {
       const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject"
       const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
       const date = headers.find((h: any) => h.name === "Date")?.value || null
+      const snippet = msgData.snippet || ""
 
       emails.push({
         id: msg.id,
         subject,
         from,
-        snippet: msgData.snippet,
+        snippet,
         date,
         awaitingReply: false,
       })
