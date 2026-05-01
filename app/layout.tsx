@@ -16,6 +16,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Veltro",
   description: "AI Email Organizer",
+  verification: {
+    google: "OEsC3XuXw94gO5EJ8bphBoCnTlEkoZEssLLHJAFlUkw",
+  },
 };
 
 export default function RootLayout({
