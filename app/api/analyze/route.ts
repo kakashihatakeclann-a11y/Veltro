@@ -10,7 +10,12 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "system",
-          content: `You are an email analyzer. Analyze ALL emails below and return ONLY a valid JSON array, no markdown, no extra text. One object per email in the same order:
+          content: `You are an email analyzer for freelancers. Analyze ALL emails and return ONLY a valid JSON array, no markdown, no extra text. One object per email in the same order:
+
+"Important" = emails from real people (clients, employers, collaborators) that need attention
+"Action Needed" = emails requiring a specific response or task from the user
+"Other" = newsletters, promotions, automated emails, notifications
+
 [{
   "category": "Important" or "Action Needed" or "Other",
   "summary": "one sentence summary",
