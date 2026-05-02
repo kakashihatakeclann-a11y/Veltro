@@ -8,7 +8,7 @@ const cat = {
   "Other":         { border: "#3a3a3a", bg: "rgba(255,255,255,0.03)", text: "#666", dot: "#444" },
 };
 
-const FREE_AT_RISK_LIMIT = 2;
+const FREE_AT_RISK_LIMIT = 5;
 
 export default function Home() {
   const { data: session } = useSession();
