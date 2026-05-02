@@ -8,6 +8,8 @@ const cat = {
   "Other":         { border: "#3a3a3a", bg: "rgba(255,255,255,0.03)", text: "#666", dot: "#444" },
 };
 
+const FREE_AT_RISK_LIMIT = 2;
+
 export default function Home() {
   const { data: session } = useSession();
   const [emails, setEmails] = useState<any[]>([]);
@@ -22,6 +24,10 @@ export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  // isPro: wire this up to your Firebase/Lemon Squeezy check later
+  const isPro = false;
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -89,10 +95,14 @@ export default function Home() {
 
   const fetchAndAnalyze = async () => {
     setLoading(true);
+    setAnalyzing(false);
     setEmails([]);
+    setFetchError(null);
     try {
       const res = await fetch("/api/gmail");
+      if (!res.ok) throw new Error(`Gmail fetch failed: ${res.status}`);
       const data = await res.json();
+      if (data.error) throw new Error(data.error);
       const fetched = data.emails || [];
       setEmails(fetched);
       setLoading(false);
@@ -103,7 +113,9 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: emailTexts }),
       });
+      if (!analysisRes.ok) throw new Error(`Analysis failed: ${analysisRes.status}`);
       const analysisData = await analysisRes.json();
+      if (analysisData.error) throw new Error(analysisData.error);
       const results = analysisData.results || [];
       const updated = fetched.map((email: any, i: number) => ({ ...email, ...results[i] }));
       setEmails(updated);
@@ -114,7 +126,10 @@ export default function Home() {
       };
       setUsage(newUsage);
       localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
-    } catch (err) { console.error(err); }
+    } catch (err: any) {
+      console.error(err);
+      setFetchError(err?.message || "Something went wrong. Please try again.");
+    }
     setLoading(false);
     setAnalyzing(false);
   };
@@ -135,7 +150,12 @@ export default function Home() {
 
   const totalTasks = emails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
   const awaitingCount = emails.filter(e => e.awaitingReply).length;
-  const atRiskEmails = emails.filter(e => e.riskLevel === "high");
+
+  // FIX 3: Gate At Risk to FREE_AT_RISK_LIMIT for free users
+  const allAtRiskEmails = emails.filter(e => e.riskLevel === "high");
+  const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
+  const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
+
   const isWorking = loading || analyzing;
 
   if (!session) {
@@ -266,9 +286,15 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem" }}>
-                Upgrade to Pro to unlock unlimited analysis, At Risk alerts, and full history.
-              </div>
+              {/* FIX 2: Honest free tier messaging, not a fake wall */}
+              {!isPro && (
+                <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                  <span>Free plan: {FREE_AT_RISK_LIMIT} At Risk alerts per session · 20 emails/day</span>
+                  <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.3rem 0.8rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
+                    Go Pro ✨
+                  </button>
+                </div>
+              )}
               {usage.analyzed > 0 && (
                 <div style={{ marginTop: "1.5rem", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.25rem" }}>
                   <div style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: d.textFaint, marginBottom: "1rem" }}>Session breakdown</div>
@@ -329,12 +355,25 @@ export default function Home() {
                 {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Refresh inbox"}
               </button>
 
-              {emails.length === 0 && !isWorking && (
+              {/* FIX 1: Show error state instead of silent failure */}
+              {fetchError && (
+                <div style={{ background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                  <div>
+                    <div style={{ fontSize: "0.85rem", color: "#E24B4A", fontWeight: 500, marginBottom: "2px" }}>Couldn't load your inbox</div>
+                    <div style={{ fontSize: "0.75rem", color: d.textMuted }}>{fetchError}</div>
+                  </div>
+                  <button onClick={fetchAndAnalyze} style={{ padding: "0.35rem 0.9rem", background: "#E24B4A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                    Try again
+                  </button>
+                </div>
+              )}
+
+              {emails.length === 0 && !isWorking && !fetchError && (
                 <div style={{ textAlign: "center", padding: "5rem 0" }}>
                   <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: d.statBg, border: `1px solid ${d.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={d.emptyIcon} strokeWidth="1.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </div>
-                  <p style={{ fontSize: "0.9rem", color: d.textFaint }}>Loading your inbox...</p>
+                  <p style={{ fontSize: "0.9rem", color: d.textFaint }}>No emails loaded yet.</p>
                 </div>
               )}
 
@@ -345,6 +384,7 @@ export default function Home() {
                     <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#E24B4A", flexShrink: 0 }} />
                     <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#E24B4A" }}>⚠ At Risk</span>
                     <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{atRiskEmails.length}</span>
+                    {!isPro && <span style={{ fontSize: "0.68rem", color: d.textFaint, marginLeft: "4px" }}>Free preview · {FREE_AT_RISK_LIMIT} of {allAtRiskEmails.length}</span>}
                   </div>
                   {atRiskEmails.map((email, i) => (
                     <div key={i} style={{ background: "rgba(226,75,74,0.05)", border: "1px solid rgba(226,75,74,0.3)", borderLeft: "3px solid #E24B4A", borderRadius: "12px", marginBottom: "8px", padding: "1rem 1.25rem" }}>
@@ -357,6 +397,13 @@ export default function Home() {
                       {email.awaitingReply && <p style={{ fontSize: "0.75rem", color: "#E24B4A", marginTop: "4px" }}>⚠ No reply sent</p>}
                     </div>
                   ))}
+                  {/* FIX 3: Show upgrade nudge if hidden At Risk emails exist */}
+                  {atRiskHidden > 0 && (
+                    <div onClick={() => setShowUpgrade(true)} style={{ background: "rgba(226,75,74,0.04)", border: "1px dashed rgba(226,75,74,0.3)", borderRadius: "12px", padding: "0.85rem 1.25rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: "0.82rem", color: "#E24B4A" }}>+{atRiskHidden} more At Risk email{atRiskHidden > 1 ? "s" : ""} hidden</span>
+                      <span style={{ fontSize: "0.78rem", color: "#7F77DD", fontWeight: 500 }}>Upgrade to see all →</span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -471,7 +518,7 @@ export default function Home() {
             </div>
             <div>
               <div style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
-              <div style={{ fontSize: "0.68rem", color: d.textSub }}>Free plan · 20 emails/day</div>
+              <div style={{ fontSize: "0.68rem", color: d.textSub }}>Free plan · 20 emails/day · {FREE_AT_RISK_LIMIT} At Risk alerts</div>
             </div>
           </div>
           <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.45rem 1.1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(83,74,183,0.4)" }}>
@@ -495,7 +542,7 @@ export default function Home() {
               </div>
               <div style={{ marginBottom: "1.5rem" }}>
                 {[
-                  { icon: "⚠️", text: "At Risk deadline alerts — know before you miss" },
+                  { icon: "⚠️", text: "Unlimited At Risk deadline alerts" },
                   { icon: "📧", text: "Unlimited email analysis every day" },
                   { icon: "✨", text: "AI reply drafts in your voice" },
                   { icon: "🎯", text: "Smarter priority categorization" },
