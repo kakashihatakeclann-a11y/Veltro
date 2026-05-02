@@ -24,6 +24,7 @@ export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [loadingMessage, setLoadingMessage] = useState("Reading your emails...");
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // isPro: wire this up to your Firebase/Lemon Squeezy check later
@@ -107,6 +108,18 @@ export default function Home() {
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
+      const messages = [
+  "Reading your emails...",
+  "Spotting deadlines...",
+  "Flagging what needs attention...",
+  "Checking for missed replies...",
+  "Almost done...",
+];
+let msgIdx = 0;
+const msgInterval = setInterval(() => {
+  msgIdx = (msgIdx + 1) % messages.length;
+  setLoadingMessage(messages[msgIdx]);
+}, 4000);
       const emailTexts = fetched.map((email: any) => `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`);
       const analysisRes = await fetch("/api/analyze", {
         method: "POST",
@@ -130,6 +143,7 @@ export default function Home() {
       console.error(err);
       setFetchError(err?.message || "Something went wrong. Please try again.");
     }
+    clearInterval(msgInterval);
     setLoading(false);
     setAnalyzing(false);
   };
@@ -341,7 +355,7 @@ export default function Home() {
               {analyzing && (
                 <div style={{ marginBottom: "1.5rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>
-                    <span>Analyzing with AI...</span>
+                    <span>{loadingMessage}</span>
                     <span>{emails.filter(e => e.category).length} / {emails.length}</span>
                   </div>
                   <div style={{ height: "3px", background: d.navBorder, borderRadius: "999px", overflow: "hidden" }}>
