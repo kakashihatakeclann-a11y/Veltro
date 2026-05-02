@@ -24,38 +24,28 @@ export async function GET() {
 
   const data = await res.json()
   const messageIds = data.messages || []
-  const emails = []
 
-  for (const msg of messageIds) {
-    try {
-      const msgRes = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      )
+  const emails = await Promise.all(
+    messageIds.map(async (msg: any) => {
+      try {
+        const msgRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+        if (!msgRes.ok) return null
+        const msgData = await msgRes.json()
+        const headers = msgData.payload?.headers || []
+        const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject"
+        const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
+        const date = headers.find((h: any) => h.name === "Date")?.value || null
+        const snippet = msgData.snippet || ""
+        return { id: msg.id, subject, from, snippet, date, awaitingReply: false }
+      } catch {
+        return null
+      }
+    })
+  )
 
-      if (!msgRes.ok) continue
-
-      const msgData = await msgRes.json()
-      const headers = msgData.payload?.headers || []
-
-      const subject = headers.find((h: any) => h.name === "Subject")?.value || "No Subject"
-      const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
-      const date = headers.find((h: any) => h.name === "Date")?.value || null
-      const snippet = msgData.snippet || ""
-
-      emails.push({
-        id: msg.id,
-        subject,
-        from,
-        snippet,
-        date,
-        awaitingReply: false,
-      })
-
-    } catch {
-      continue
-    }
-  }
-
-  return NextResponse.json({ emails })
+  const filteredEmails = emails.filter(Boolean)
+  return NextResponse.json({ emails: filteredEmails })
 }
