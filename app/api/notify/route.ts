@@ -10,9 +10,9 @@ export async function GET(request: Request) {
   }
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend.broadcasts.create({
+      audienceId: process.env.RESEND_AUDIENCE_ID!,
       from: 'Veltro <onboarding@resend.dev>',
-      to: ['test@example.com'],
       subject: '⚠️ You have at-risk client emails waiting',
       html: `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
@@ -27,7 +27,13 @@ export async function GET(request: Request) {
       `,
     })
 
-    return NextResponse.json({ success: true, data })
+    if (error) {
+      return NextResponse.json({ error }, { status: 500 })
+    }
+
+    await resend.broadcasts.send(data!.id)
+
+    return NextResponse.json({ success: true })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
   }
