@@ -35,7 +35,6 @@ export const authOptions = {
           email: user.email,
           firstName: user.name?.split(" ")[0] || "",
           unsubscribed: false,
-          audienceId: process.env.RESEND_AUDIENCE_ID!,
         })
       } catch (error) {
         console.error("Failed to add to Resend audience:", error)
@@ -44,5 +43,6 @@ export const authOptions = {
     },
   },
 }
+
 const handler = NextAuth(authOptions)
 export { handler as GET, handler as POST }
