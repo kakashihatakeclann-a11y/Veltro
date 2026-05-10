@@ -15,23 +15,38 @@ export async function POST(req: NextRequest) {
                 content: `You are an email analyzer for freelancers. Analyze this single email and return ONLY a valid JSON object, no markdown, no extra text.
 
 Rules for categorization:
-- "Important" = emails from real individual people (clients, employers, collaborators, friends, family) that need attention. ALSO includes security alerts, account warnings, payment failures, legal notices, or anything that could have serious consequences if ignored.
-- "Action Needed" = emails requiring a specific action or response. Could be from a real person OR a service (e.g. invoice due, account issue, deadline, verification required, contract to sign).
-- "Other" = mass emails, newsletters, promotions, marketing, automated notifications, social media alerts, app digests, weekly summaries. If it was sent to thousands of people and requires no action, it's Other.
+- "Important" = any email that could seriously affect the person's life, work, money, health, relationships, or reputation if ignored. This includes:
+  * Emails from real individual people (clients, employers, collaborators, friends, family)
+  * Security alerts, account compromises, suspicious login attempts
+  * Bank alerts, fraud warnings, suspicious transactions, payment failures, overdrafts
+  * Hospital, medical, healthcare, prescription, or appointment emails
+  * Government, tax, immigration, court, or legal emails
+  * Insurance emails involving claims, renewals, or cancellations
+  * Utility disconnection warnings (electricity, water, internet)
+  * Landlord or property management emails
+  * School, university, or educational institution emails
+  * Employment, HR, payroll, or contract emails
+  * Debt collection or credit score alerts
+  * Flight, travel, or visa confirmation and changes
+  * Any email with words like "urgent", "action required", "final notice", "your account has been suspended", "deadline", "overdue"
+
+- "Action Needed" = emails requiring a specific task or response that aren't immediately critical but still need to be done. Includes:
+  * Invoice requests or payment requests from clients
+  * Account verification or two-factor authentication emails
+  * Software subscription renewals
+  * Meeting requests or calendar invites
+  * Form submissions or document signing requests
+  * Shipping or delivery updates requiring action
+  * Job application status updates
+
+- "Other" = everything else. Mass emails, newsletters, promotions, marketing, automated digests, social media notifications, app updates, press releases, surveys, loyalty rewards, receipts for routine purchases. If it was sent to thousands of people and requires no action, it is Other.
 
 Rules for riskLevel:
 - "high" ONLY if: email is from a real person AND contains a specific deadline AND no reply has been sent. NEVER flag newsletters, automated emails, or promotional emails as high risk.
 - "medium" if from a real person with an implicit deadline or time-sensitive request within 7 days.
 - "none" for everything else including all automated and marketing emails.
 
-Extra rules:
-- If the sender appears to be a real person (e.g. john@gmail.com, sarah@company.com) rather than an automated system (e.g. no-reply@, notifications@, support@, billing@, noreply@), always categorize as Important or Action Needed, never Other.
-- Google security alerts = Important, riskLevel none
-- Payment receipts from automated systems = Other, but payment emails from real people = Important
-- Invoice requests from clients = Action Needed
-- Account verification emails = Action Needed
-- Promotional emails = always Other, always riskLevel none
-- When in doubt between Important and Other, ask: did a real human write this specifically for me? If yes, Important. If no, Other.
+Core principle: When in doubt ask — if this person ignored this email for a week, could it seriously hurt them financially, professionally, legally, or personally? If yes, Important. If no, Other.
 
 Return exactly this shape:
 {"category":"Important","summary":"one sentence","tasks":["task 1"],"awaitingReply":false,"deadline":null,"riskLevel":"none"}`
