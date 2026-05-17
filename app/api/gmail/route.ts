@@ -1,8 +1,7 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "../auth/[...nextauth]/route"
 import { NextResponse } from "next/server"
-import { db } from "@/lib/firebase"
-import { doc, getDoc } from "firebase/firestore"
+import { adminDb } from "@/lib/firebaseAdmin"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -19,8 +18,8 @@ export async function GET() {
   const email = (session as any).user?.email
   let isPro = false
   if (email) {
-    const userDoc = await getDoc(doc(db, "users", email))
-    if (userDoc.exists()) {
+    const userDoc = await adminDb.collection("users").doc(email).get()
+    if (userDoc.exists) {
       isPro = userDoc.data()?.isPro === true
     }
   }
