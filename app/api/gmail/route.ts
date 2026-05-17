@@ -1,6 +1,8 @@
 import { getServerSession } from "next-auth"
 import { authOptions } from "../auth/[...nextauth]/route"
 import { NextResponse } from "next/server"
+import { db } from "@/lib/firebase"
+import { doc, getDoc } from "firebase/firestore"
 
 export async function GET() {
   const session = await getServerSession(authOptions)
@@ -13,18 +15,28 @@ export async function GET() {
     return NextResponse.json({ error: "No access token" }, { status: 401 })
   }
 
+  // Check if user is Pro
+  const email = (session as any).user?.email
+  let isPro = false
+  if (email) {
+    const userDoc = await getDoc(doc(db, "users", email))
+    if (userDoc.exists()) {
+      isPro = userDoc.data()?.isPro === true
+    }
+  }
+
+  const maxResults = isPro ? 100 : 20
+
   const res = await fetch(
-    "https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=20",
+    `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   )
-
   if (!res.ok) {
     return NextResponse.json({ error: "Failed to fetch emails" }, { status: 500 })
   }
 
   const data = await res.json()
   const messageIds = data.messages || []
-
   const emails = await Promise.all(
     messageIds.map(async (msg: any) => {
       try {
@@ -47,5 +59,5 @@ export async function GET() {
   )
 
   const filteredEmails = emails.filter(Boolean)
-  return NextResponse.json({ emails: filteredEmails })
+  return NextResponse.json({ emails: filteredEmails, isPro })
 }
