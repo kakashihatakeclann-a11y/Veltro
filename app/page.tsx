@@ -25,9 +25,7 @@ export default function Home() {
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // isPro: wire this up to your Firebase/Lemon Squeezy check later
-  const isPro = false;
+  const [isPro, setIsPro] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -104,6 +102,7 @@ export default function Home() {
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const fetched = data.emails || [];
+      if (data.isPro !== undefined) setIsPro(data.isPro);
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
@@ -149,14 +148,105 @@ export default function Home() {
   };
 
   const totalTasks = emails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
-  const awaitingCount = emails.filter(e => e.awaitingReply).length;
-
-  // FIX 3: Gate At Risk to FREE_AT_RISK_LIMIT for free users
   const allAtRiskEmails = emails.filter(e => e.riskLevel === "high");
   const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
   const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
-
   const isWorking = loading || analyzing;
+
+  const renderEmailCard = (email: any, i: number, isAtRisk = false) => {
+    const globalIdx = emails.indexOf(email);
+    const isOpen = expanded === globalIdx;
+    const borderColor = isAtRisk ? "#E24B4A" : cat[email.category as keyof typeof cat]?.border || "#3a3a3a";
+    const bgColor = isAtRisk ? "rgba(226,75,74,0.05)" : d.cardBg;
+    const borderStyle = isAtRisk ? "1px solid rgba(226,75,74,0.3)" : `1px solid ${d.cardBorder}`;
+
+    return (
+      <div key={i} style={{ background: bgColor, border: borderStyle, borderLeft: `3px solid ${borderColor}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
+        onClick={() => setExpanded(isOpen ? null : globalIdx)}>
+        <div style={{ padding: "1rem 1.25rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "3px" }}>
+            <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text, lineHeight: 1.4 }}>{email.subject}</strong>
+            {isAtRisk ? (
+              <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
+            ) : email.category && (
+              <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, background: cat[email.category as keyof typeof cat]?.bg, color: cat[email.category as keyof typeof cat]?.text }}>
+                {email.category}
+              </span>
+            )}
+          </div>
+          <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
+          {email.deadline && <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>}
+          {email.awaitingReply && (
+            <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "2px 8px", borderRadius: "4px", display: "inline-block", marginBottom: "6px" }}>⚠ No reply in 48h</span>
+          )}
+          {!isAtRisk && <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.snippet}</p>}
+        </div>
+        {isOpen && (
+          <div style={{ padding: "0 1.25rem 1rem", borderTop: `1px solid ${isAtRisk ? "rgba(226,75,74,0.2)" : d.divider}` }} onClick={e => e.stopPropagation()}>
+            <div style={{ height: "1px", background: isAtRisk ? "rgba(226,75,74,0.15)" : d.divider, marginBottom: "0.75rem" }} />
+            {email.summary && (
+              <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "0.75rem" }}>
+                <div style={{ width: "16px", height: "16px", borderRadius: "4px", background: isAtRisk ? "rgba(226,75,74,0.15)" : "rgba(127,119,221,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
+                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={isAtRisk ? "#E24B4A" : "#7F77DD"} strokeWidth="2.5"><path d="M9 12h6M9 8h6M9 16h4"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+                </div>
+                <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.summary}</p>
+              </div>
+            )}
+            {email.tasks?.length > 0 && (
+              <div style={{ marginBottom: "0.75rem" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "#EF9F27", marginBottom: "6px" }}>Tasks</div>
+                {email.tasks.map((t: string, j: number) => (
+                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "5px" }}>
+                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#EF9F27", flexShrink: 0, marginTop: "6px", opacity: 0.6 }} />
+                    <span style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.4 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: "0.75rem" }}>
+              {replyOpen === globalIdx ? (
+                <div>
+                  {generatingReply === globalIdx && (
+                    <div style={{ fontSize: "0.78rem", color: "#7F77DD", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+                      <div style={{ width: "10px", height: "10px", border: "2px solid #7F77DD", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                      Generating reply...
+                    </div>
+                  )}
+                  <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Write your reply..."
+                    style={{ width: "100%", minHeight: "80px", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", color: d.text, fontSize: "0.82rem", padding: "0.6rem 0.75rem", fontFamily: "DM Sans, sans-serif", resize: "vertical", outline: "none" }} />
+                  <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
+                    <button onClick={() => sendReply(email, globalIdx)} disabled={sending || !replyText.trim()}
+                      style={{ padding: "0.4rem 1rem", background: "#534AB7", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: sending || !replyText.trim() ? 0.5 : 1 }}>
+                      {sending ? "Sending..." : "Send"}
+                    </button>
+                    <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
+                      style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
+                      ✨ AI Draft
+                    </button>
+                    <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
+                      style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button onClick={() => { setReplyOpen(globalIdx); setReplyText(""); }}
+                    style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#534AB7", border: "1px solid #534AB7", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
+                    ↩ Reply
+                  </button>
+                  <button onClick={() => generateReply(email, globalIdx)}
+                    style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
+                    ✨ AI Reply
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   if (!session) {
     return (
@@ -286,7 +376,6 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              {/* FIX 2: Honest free tier messaging, not a fake wall */}
               {!isPro && (
                 <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <span>Free plan: {FREE_AT_RISK_LIMIT} At Risk alerts per session · 20 emails/day</span>
@@ -355,7 +444,6 @@ export default function Home() {
                 {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Refresh inbox"}
               </button>
 
-              {/* FIX 1: Show error state instead of silent failure */}
               {fetchError && (
                 <div style={{ background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                   <div>
@@ -386,18 +474,7 @@ export default function Home() {
                     <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{atRiskEmails.length}</span>
                     {!isPro && <span style={{ fontSize: "0.68rem", color: d.textFaint, marginLeft: "4px" }}>Free preview · {FREE_AT_RISK_LIMIT} of {allAtRiskEmails.length}</span>}
                   </div>
-                  {atRiskEmails.map((email, i) => (
-                    <div key={i} style={{ background: "rgba(226,75,74,0.05)", border: "1px solid rgba(226,75,74,0.3)", borderLeft: "3px solid #E24B4A", borderRadius: "12px", marginBottom: "8px", padding: "1rem 1.25rem" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "4px" }}>
-                        <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text }}>{email.subject}</strong>
-                        <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
-                      </div>
-                      <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
-                      {email.deadline && <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>}
-                      {email.awaitingReply && <p style={{ fontSize: "0.75rem", color: "#E24B4A", marginTop: "4px" }}>⚠ No reply sent</p>}
-                    </div>
-                  ))}
-                  {/* FIX 3: Show upgrade nudge if hidden At Risk emails exist */}
+                  {atRiskEmails.map((email, i) => renderEmailCard(email, i, true))}
                   {atRiskHidden > 0 && (
                     <div onClick={() => setShowUpgrade(true)} style={{ background: "rgba(226,75,74,0.04)", border: "1px dashed rgba(226,75,74,0.3)", borderRadius: "12px", padding: "0.85rem 1.25rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ fontSize: "0.82rem", color: "#E24B4A" }}>+{atRiskHidden} more At Risk email{atRiskHidden > 1 ? "s" : ""} hidden</span>
@@ -416,93 +493,7 @@ export default function Home() {
                       <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: d.textFaint }}>{section}</span>
                       <span style={{ fontSize: "0.7rem", color: d.textFaint, background: d.statBg, padding: "1px 7px", borderRadius: "999px" }}>{grouped[section].length}</span>
                     </div>
-                    {grouped[section].map((email, i) => {
-                      const globalIdx = emails.indexOf(email);
-                      const isOpen = expanded === globalIdx;
-                      return (
-                        <div key={i} style={{ background: d.cardBg, border: `1px solid ${d.cardBorder}`, borderLeft: `2px solid ${cat[section].border}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
-                          onClick={() => setExpanded(isOpen ? null : globalIdx)}>
-                          <div style={{ padding: "1rem 1.25rem" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "3px" }}>
-                              <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text, lineHeight: 1.4 }}>{email.subject}</strong>
-                              {email.category && (
-                                <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, background: cat[section].bg, color: cat[section].text }}>
-                                  {email.category}
-                                </span>
-                              )}
-                            </div>
-                            <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
-                            {email.awaitingReply && (
-                              <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "2px 8px", borderRadius: "4px", display: "inline-block", marginBottom: "6px" }}>⚠ No reply in 48h</span>
-                            )}
-                            <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.snippet}</p>
-                          </div>
-                          {isOpen && (
-                            <div style={{ padding: "0 1.25rem 1rem", borderTop: `1px solid ${d.divider}` }}>
-                              <div style={{ height: "1px", background: d.divider, marginBottom: "0.75rem" }} />
-                              {email.summary && (
-                                <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                                  <div style={{ width: "16px", height: "16px", borderRadius: "4px", background: "rgba(127,119,221,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
-                                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><path d="M9 12h6M9 8h6M9 16h4"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
-                                  </div>
-                                  <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.summary}</p>
-                                </div>
-                              )}
-                              {email.tasks?.length > 0 && (
-                                <div>
-                                  <div style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "#EF9F27", marginBottom: "6px" }}>Tasks</div>
-                                  {email.tasks.map((t: string, j: number) => (
-                                    <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "5px" }}>
-                                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#EF9F27", flexShrink: 0, marginTop: "6px", opacity: 0.6 }} />
-                                      <span style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.4 }}>{t}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                              <div style={{ marginTop: "0.75rem" }} onClick={e => e.stopPropagation()}>
-                                {replyOpen === globalIdx ? (
-                                  <div>
-                                    {generatingReply === globalIdx && (
-                                      <div style={{ fontSize: "0.78rem", color: "#7F77DD", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                                        <div style={{ width: "10px", height: "10px", border: "2px solid #7F77DD", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                                        Generating reply...
-                                      </div>
-                                    )}
-                                    <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Write your reply..."
-                                      style={{ width: "100%", minHeight: "80px", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", color: d.text, fontSize: "0.82rem", padding: "0.6rem 0.75rem", fontFamily: "DM Sans, sans-serif", resize: "vertical", outline: "none" }} />
-                                    <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
-                                      <button onClick={() => sendReply(email, globalIdx)} disabled={sending || !replyText.trim()}
-                                        style={{ padding: "0.4rem 1rem", background: "#534AB7", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: sending || !replyText.trim() ? 0.5 : 1 }}>
-                                        {sending ? "Sending..." : "Send"}
-                                      </button>
-                                      <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
-                                        style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
-                                        ✨ AI Draft
-                                      </button>
-                                      <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
-                                        style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
-                                        Cancel
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div style={{ display: "flex", gap: "8px" }}>
-                                    <button onClick={() => { setReplyOpen(globalIdx); setReplyText(""); }}
-                                      style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#534AB7", border: "1px solid #534AB7", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                                      ↩ Reply
-                                    </button>
-                                    <button onClick={() => generateReply(email, globalIdx)}
-                                      style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                                      ✨ AI Reply
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {grouped[section].map((email, i) => renderEmailCard(email, i, false))}
                   </div>
                 )
               )}
@@ -518,12 +509,16 @@ export default function Home() {
             </div>
             <div>
               <div style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
-              <div style={{ fontSize: "0.68rem", color: d.textSub }}>Free plan · 20 emails/day · {FREE_AT_RISK_LIMIT} At Risk alerts</div>
+              <div style={{ fontSize: "0.68rem", color: d.textSub }}>
+                {isPro ? "Pro plan · Unlimited emails" : `Free plan · 20 emails/day · ${FREE_AT_RISK_LIMIT} At Risk alerts`}
+              </div>
             </div>
           </div>
-          <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.45rem 1.1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(83,74,183,0.4)" }}>
-            Upgrade to Pro ✨
-          </button>
+          {!isPro && (
+            <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.45rem 1.1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(83,74,183,0.4)" }}>
+              Upgrade to Pro ✨
+            </button>
+          )}
         </div>
 
         {/* UPGRADE POPUP */}
@@ -548,23 +543,4 @@ export default function Home() {
                   { icon: "🎯", text: "Smarter priority categorization" },
                 ].map(({ icon, text }) => (
                   <div key={text} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "0.85rem" }}>
-                    <span style={{ fontSize: "1.1rem" }}>{icon}</span>
-                    <span style={{ fontSize: "0.85rem", color: d.text }}>{text}</span>
-                  </div>
-                ))}
-              </div>
-              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", textAlign: "center", padding: "0.85rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", borderRadius: "12px", textDecoration: "none", fontWeight: 600, fontSize: "0.95rem", boxShadow: "0 4px 16px rgba(83,74,183,0.4)" }}>
-                Upgrade Now →
-              </a>
-              <button onClick={() => setShowUpgrade(false)} style={{ display: "block", width: "100%", marginTop: "0.75rem", padding: "0.5rem", background: "transparent", color: d.textSub, border: "none", cursor: "pointer", fontSize: "0.82rem", fontFamily: "'DM Sans', sans-serif" }}>
-                Maybe later
-              </button>
-            </div>
-          </div>
-        )}
-
-      </div>
-    </>
-  );
-}
+                    <span styl
