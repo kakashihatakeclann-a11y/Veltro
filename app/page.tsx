@@ -161,7 +161,7 @@ export default function Home() {
     const borderStyle = isAtRisk ? "1px solid rgba(226,75,74,0.3)" : `1px solid ${d.cardBorder}`;
 
     return (
-      <div key={i} style={{ background: bgColor, border: borderStyle, borderLeft: `3px solid ${borderColor}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
+      <div key={globalIdx} style={{ background: bgColor, border: borderStyle, borderLeft: `3px solid ${borderColor}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
         onClick={() => setExpanded(isOpen ? null : globalIdx)}>
         <div style={{ padding: "1rem 1.25rem" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "3px" }}>
