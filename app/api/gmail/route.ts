@@ -24,7 +24,7 @@ export async function GET() {
     }
   }
 
-  const maxResults = isPro ? 100 : 20
+  const maxResults = isPro ? 100 : 50
 
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
