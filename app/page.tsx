@@ -566,7 +566,7 @@ export default function Home() {
                 ))}
               </div>
               <a
-                href="https://veltro.lemonsqueezy.com/buy/your-checkout-link"
+                href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{ display: "block", width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.92rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.4)" }}
