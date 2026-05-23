@@ -248,6 +248,7 @@ export default function Home() {
     );
   };
 
+  // ─── LANDING PAGE (logged out) ───────────────────────────────────────────────
   if (!session) {
     return (
       <>
@@ -261,9 +262,10 @@ export default function Home() {
           .logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 2.5rem; }
           .logo-icon { width: 40px; height: 40px; border-radius: 10px; background: #534AB7; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(83,74,183,0.4); }
           .logo-text { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
-          .headline { font-family: 'Syne', sans-serif; font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 800; color: #fff; text-align: center; line-height: 1.1; letter-spacing: -0.04em; margin-bottom: 1.25rem; }
+          .headline { font-family: 'Syne', sans-serif; font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 800; color: #fff; text-align: center; line-height: 1.1; letter-spacing: -0.04em; margin-bottom: 1.25rem; max-width: 680px; }
           .headline span { color: #7F77DD; }
           .subhead { color: #666; font-size: 1.05rem; text-align: center; max-width: 420px; line-height: 1.65; margin-bottom: 2.5rem; font-weight: 300; }
+          .risk-banner { display: flex; align-items: center; gap: 10px; background: rgba(226,75,74,0.08); border: 1px solid rgba(226,75,74,0.2); border-radius: 10px; padding: 10px 16px; margin-bottom: 2rem; font-size: 0.82rem; color: #E24B4A; max-width: 420px; text-align: left; }
           .pills { display: flex; gap: 10px; margin-bottom: 2.8rem; flex-wrap: wrap; justify-content: center; }
           .pill { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); font-size: 0.78rem; color: #888; }
           .signin-btn { display: flex; align-items: center; gap: 10px; padding: 0.8rem 1.8rem; background: #fff; color: #000; border: none; border-radius: 12px; cursor: pointer; font-size: 0.95rem; font-weight: 500; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.15s; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
@@ -282,17 +284,31 @@ export default function Home() {
             </div>
             <span className="logo-text">Veltro</span>
           </div>
-          <h1 className="headline">Your inbox,<br/><span>intelligently organized</span></h1>
-          <p className="subhead">Connect Gmail and let AI categorize, summarize, and extract tasks from your emails — automatically.</p>
+
+          <h1 className="headline">
+            Never miss a client deadline<br/><span>buried in your inbox</span> again
+          </h1>
+
+          <p className="subhead">
+            Veltro scans your Gmail and flags at-risk emails before you miss them — so you stay on top of every client, every deadline, every time.
+          </p>
+
+          <div className="risk-banner">
+            <span style={{ fontSize: "1.1rem" }}>⚠️</span>
+            <span><strong style={{ color: "#fff" }}>Freelancers lose clients over missed emails, not missed work.</strong> Veltro catches what you don't.</span>
+          </div>
+
           <div className="pills">
-            {["AI Categorization", "Task Extraction", "Smart Summaries", "Deadline Alerts"].map(l => (
+            {["At Risk Deadline Alerts", "AI Task Extraction", "Smart Summaries", "AI Reply Drafts"].map(l => (
               <div key={l} className="pill">{l}</div>
             ))}
           </div>
+
           <button className="signin-btn" onClick={() => signIn("google")}>
             <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Sign in with Google
+            Connect Gmail — it's free
           </button>
+
           <p className="trust">Read-only access · Your data is never stored</p>
           <div style={{ marginTop: "1rem", display: "flex", gap: "16px" }}>
             <a href="/privacy" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Privacy Policy</a>
@@ -303,6 +319,7 @@ export default function Home() {
     );
   }
 
+  // ─── MAIN APP (logged in) ────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -533,7 +550,7 @@ export default function Home() {
                 </div>
                 <div style={{ fontSize: "1.4rem", fontWeight: 700, color: d.text, fontFamily: "'Syne', sans-serif", marginBottom: "0.25rem" }}>Veltro Pro</div>
                 <div style={{ fontSize: "0.85rem", color: d.textSub, marginBottom: "1rem" }}>Never miss a client deadline again</div>
-                <div style={{ fontSize: "2.2rem", fontWeight: 800, color: "#7F77DD", letterSpacing: "-0.02em" }}>NZ$9.99<span style={{ fontSize: "1rem", fontWeight: 400, color: d.textSub }}>/month</span></div>
+                <div style={{ fontSize: "2.2rem", fontWeight: 800, color: "#7F77DD", letterSpacing: "-0.02em" }}>NZ$29.99<span style={{ fontSize: "1rem", fontWeight: 400, color: d.textSub }}>/month</span></div>
               </div>
               <div style={{ marginBottom: "1.5rem" }}>
                 {[
@@ -543,4 +560,27 @@ export default function Home() {
                   { icon: "🎯", text: "Smarter priority categorization" },
                 ].map(({ icon, text }) => (
                   <div key={text} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "0.85rem" }}>
-                    <span styl
+                    <span style={{ fontSize: "1rem" }}>{icon}</span>
+                    <span style={{ fontSize: "0.85rem", color: d.textMuted }}>{text}</span>
+                  </div>
+                ))}
+              </div>
+              <a
+                href="https://veltro.lemonsqueezy.com/buy/your-checkout-link"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: "block", width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.92rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.4)" }}
+              >
+                Upgrade to Pro — NZ$29.99/mo
+              </a>
+              <button onClick={() => setShowUpgrade(false)} style={{ width: "100%", marginTop: "0.75rem", padding: "0.5rem", background: "transparent", border: "none", color: d.textFaint, fontSize: "0.8rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+                Maybe later
+              </button>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </>
+  );
+}
