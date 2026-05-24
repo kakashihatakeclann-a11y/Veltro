@@ -221,7 +221,7 @@ export default function Home() {
                     </button>
                     <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
                       style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
-                      ✨ AI Draft
+                      ✨AI Assistance
                     </button>
                     <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
                       style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
