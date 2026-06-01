@@ -23,7 +23,6 @@ export async function GET() {
     const userDoc = await userRef.get()
 
     if (!userDoc.exists) {
-      // New user — create doc with trial start date
       await userRef.set({
         isPro: false,
         trialStartDate: new Date().toISOString(),
@@ -45,7 +44,6 @@ export async function GET() {
     }
   }
 
-  // Trial users get Pro features
   const isProOrTrial = isPro || trialActive
   const maxResults = isProOrTrial ? 100 : 50
 
