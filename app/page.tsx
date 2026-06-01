@@ -26,6 +26,8 @@ export default function Home() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isPro, setIsPro] = useState(false);
+  const [trialActive, setTrialActive] = useState(false);
+  const [trialDaysLeft, setTrialDaysLeft] = useState(0);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -103,6 +105,8 @@ export default function Home() {
       if (data.error) throw new Error(data.error);
       const fetched = data.emails || [];
       if (data.isPro !== undefined) setIsPro(data.isPro);
+      if (data.trialDaysLeft !== undefined) setTrialDaysLeft(data.trialDaysLeft);
+      if (data.trialActive !== undefined) setTrialActive(data.trialActive);
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
@@ -221,7 +225,7 @@ export default function Home() {
                     </button>
                     <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
                       style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
-                      ✨AI Assistance
+                      ✨ AI Assist
                     </button>
                     <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
                       style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
@@ -237,7 +241,7 @@ export default function Home() {
                   </button>
                   <button onClick={() => generateReply(email, globalIdx)}
                     style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                    ✨ AI Reply
+                    ✨ AI Assist
                   </button>
                 </div>
               )}
@@ -248,7 +252,6 @@ export default function Home() {
     );
   };
 
-  // ─── LANDING PAGE (logged out) ───────────────────────────────────────────────
   if (!session) {
     return (
       <>
@@ -284,31 +287,25 @@ export default function Home() {
             </div>
             <span className="logo-text">Veltro</span>
           </div>
-
           <h1 className="headline">
             Never miss a client deadline<br/><span>buried in your inbox</span> again
           </h1>
-
           <p className="subhead">
             Veltro scans your Gmail and flags at-risk emails before you miss them — so you stay on top of every client, every deadline, every time.
           </p>
-
           <div className="risk-banner">
             <span style={{ fontSize: "1.1rem" }}>⚠️</span>
             <span><strong style={{ color: "#fff" }}>Freelancers lose clients over missed emails, not missed work.</strong> Veltro catches what you don't.</span>
           </div>
-
           <div className="pills">
-            {["At Risk Deadline Alerts", "AI Task Extraction", "Smart Summaries", "AI Reply Drafts"].map(l => (
+            {["At Risk Deadline Alerts", "AI Task Extraction", "Smart Summaries", "AI Assist"].map(l => (
               <div key={l} className="pill">{l}</div>
             ))}
           </div>
-
           <button className="signin-btn" onClick={() => signIn("google")}>
             <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Sign in with Google
           </button>
-
           <p className="trust">Read-only access · Your data is never stored</p>
           <div style={{ marginTop: "1rem", display: "flex", gap: "16px" }}>
             <a href="/privacy" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Privacy Policy</a>
@@ -319,7 +316,6 @@ export default function Home() {
     );
   }
 
-  // ─── MAIN APP (logged in) ────────────────────────────────────────────────────
   return (
     <>
       <style>{`
@@ -333,8 +329,15 @@ export default function Home() {
 
       <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s", paddingBottom: "70px" }}>
 
+        {/* TRIAL BANNER */}
+        {trialActive && (
+          <div style={{ position: "fixed", top: 0, left: 0, right: 0, background: "linear-gradient(135deg, #534AB7, #7F77DD)", padding: "0.5rem 2rem", textAlign: "center", fontSize: "0.78rem", color: "#fff", zIndex: 30 }}>
+            🎉 Free trial — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left · <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => setShowUpgrade(true)}>Upgrade to keep access</span>
+          </div>
+        )}
+
         {/* NAV */}
-        <nav style={{ borderBottom: `1px solid ${d.navBorder}`, padding: "0.85rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, background: d.navBg, backdropFilter: "blur(12px)", zIndex: 10 }}>
+        <nav style={{ borderBottom: `1px solid ${d.navBorder}`, padding: "0.85rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: trialActive ? "32px" : 0, background: d.navBg, backdropFilter: "blur(12px)", zIndex: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ width: "28px", height: "28px", borderRadius: "7px", background: "#534AB7", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <svg width="13" height="13" viewBox="0 0 100 130" fill="none">
@@ -395,7 +398,7 @@ export default function Home() {
               </div>
               {!isPro && (
                 <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <span>Free plan: {FREE_AT_RISK_LIMIT} At Risk alerts per session · 20 emails/day</span>
+                  <span>{trialActive ? `Trial plan · ${trialDaysLeft} days left` : `Free plan · ${FREE_AT_RISK_LIMIT} At Risk alerts per session · 20 emails/day`}</span>
                   <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.3rem 0.8rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
                     Go Pro ✨
                   </button>
@@ -482,7 +485,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* AT RISK SECTION */}
               {atRiskEmails.length > 0 && (
                 <div style={{ marginBottom: "2rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
@@ -501,7 +503,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* EMAIL SECTIONS */}
               {(["Important", "Action Needed", "Other"] as const).map((section) =>
                 grouped[section].length > 0 && (
                   <div key={section} style={{ marginBottom: "2rem" }}>
@@ -527,7 +528,7 @@ export default function Home() {
             <div>
               <div style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
               <div style={{ fontSize: "0.68rem", color: d.textSub }}>
-                {isPro ? "Pro plan · Unlimited emails" : `Free plan · 20 emails/day · ${FREE_AT_RISK_LIMIT} At Risk alerts`}
+                {isPro ? "Pro plan · Unlimited emails" : trialActive ? `Trial · ${trialDaysLeft} days left` : `Free plan · 20 emails/day · ${FREE_AT_RISK_LIMIT} At Risk alerts`}
               </div>
             </div>
           </div>
@@ -556,7 +557,7 @@ export default function Home() {
                 {[
                   { icon: "⚠️", text: "Unlimited At Risk deadline alerts" },
                   { icon: "📧", text: "Unlimited email analysis every day" },
-                  { icon: "✨", text: "AI reply drafts in your voice" },
+                  { icon: "✨", text: "AI Assist — replies in your voice" },
                   { icon: "🎯", text: "Smarter priority categorization" },
                 ].map(({ icon, text }) => (
                   <div key={text} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "0.85rem" }}>
@@ -565,12 +566,8 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <a
-                href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ display: "block", width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.92rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.4)" }}
-              >
+              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.92rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.4)" }}>
                 Upgrade to Pro — NZ$29.99/mo
               </a>
               <button onClick={() => setShowUpgrade(false)} style={{ width: "100%", marginTop: "0.75rem", padding: "0.5rem", background: "transparent", border: "none", color: d.textFaint, fontSize: "0.8rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
