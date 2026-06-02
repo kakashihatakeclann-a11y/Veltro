@@ -3,9 +3,9 @@ import { useState, useEffect, useRef } from "react";
 import { useSession, signIn, signOut } from "next-auth/react";
 
 const cat = {
-  "Important":     { border: "#E24B4A", bg: "rgba(226,75,74,0.08)", text: "#E24B4A", dot: "#E24B4A" },
-  "Action Needed": { border: "#EF9F27", bg: "rgba(239,159,39,0.08)", text: "#EF9F27", dot: "#EF9F27" },
-  "Other":         { border: "#3a3a3a", bg: "rgba(255,255,255,0.03)", text: "#666", dot: "#444" },
+  "Important":     { border: "#E24B4A", bg: "rgba(226,75,74,0.08)", text: "#E24B4A", dot: "#E24B4A", label: "IMPORTANT" },
+  "Action Needed": { border: "#EF9F27", bg: "rgba(239,159,39,0.08)", text: "#EF9F27", dot: "#EF9F27", label: "ACTION" },
+  "Other":         { border: "#2a2a2a", bg: "rgba(255,255,255,0.02)", text: "#555", dot: "#333", label: "OTHER" },
 };
 
 const FREE_AT_RISK_LIMIT = 5;
@@ -16,18 +16,15 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [analyzing, setAnalyzing] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
-  const [replyOpen, setReplyOpen] = useState<number | null>(null);
-  const [replyText, setReplyText] = useState("");
-  const [sending, setSending] = useState(false);
-  const [generatingReply, setGeneratingReply] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"inbox" | "activity">("inbox");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
-  const [usage, setUsage] = useState({ analyzed: 0, tasks: 0, replies: 0 });
+  const [usage, setUsage] = useState({ analyzed: 0, tasks: 0 });
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [trialActive, setTrialActive] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -41,56 +38,22 @@ export default function Home() {
   };
 
   const d = {
-    bg: theme === "dark" ? "#080808" : "#f5f5f5",
-    navBg: theme === "dark" ? "rgba(8,8,8,0.9)" : "rgba(245,245,245,0.9)",
-    navBorder: theme === "dark" ? "#141414" : "#e0e0e0",
-    cardBg: theme === "dark" ? "#0c0c0c" : "#ffffff",
-    cardBorder: theme === "dark" ? "#161616" : "#e8e8e8",
-    statBg: theme === "dark" ? "#0e0e0e" : "#ffffff",
-    text: theme === "dark" ? "#fff" : "#111",
-    textSub: theme === "dark" ? "#666" : "#888",
-    textMuted: theme === "dark" ? "#999" : "#666",
-    textFaint: theme === "dark" ? "#444" : "#bbb",
-    divider: theme === "dark" ? "#111" : "#eee",
-    tabBg: theme === "dark" ? "#0e0e0e" : "#ececec",
-    tabActiveBg: theme === "dark" ? "#1a1a1a" : "#fff",
-    tabActiveText: theme === "dark" ? "#fff" : "#111",
-    emptyIcon: theme === "dark" ? "#333" : "#ccc",
-  };
-
-  const sendReply = async (email: any, idx: number) => {
-    setSending(true);
-    try {
-      const toMatch = email.from.match(/<(.+)>/);
-      const to = toMatch ? toMatch[1] : email.from;
-      await fetch("/api/gmail/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to, subject: `Re: ${email.subject}`, message: replyText, threadId: email.threadId }),
-      });
-      setReplyOpen(null);
-      setReplyText("");
-      const newUsage = { ...usage, replies: usage.replies + 1 };
-      setUsage(newUsage);
-      localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
-    } catch (err) { console.error(err); }
-    setSending(false);
-  };
-
-  const generateReply = async (email: any, idx: number) => {
-    setGeneratingReply(idx);
-    setReplyOpen(idx);
-    setReplyText("");
-    try {
-      const res = await fetch("/api/reply", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: email.subject, from: email.from, snippet: email.snippet, summary: email.summary || "" }),
-      });
-      const data = await res.json();
-      setReplyText(data.reply || "");
-    } catch (err) { console.error(err); }
-    setGeneratingReply(null);
+    bg:           theme === "dark" ? "#060606" : "#f2f2f0",
+    navBg:        theme === "dark" ? "rgba(6,6,6,0.92)" : "rgba(242,242,240,0.92)",
+    navBorder:    theme === "dark" ? "#111" : "#ddd",
+    cardBg:       theme === "dark" ? "#0a0a0a" : "#ffffff",
+    cardBorder:   theme === "dark" ? "#141414" : "#e4e4e4",
+    statBg:       theme === "dark" ? "#0d0d0d" : "#ffffff",
+    text:         theme === "dark" ? "#f0f0f0" : "#0d0d0d",
+    textSub:      theme === "dark" ? "#555" : "#888",
+    textMuted:    theme === "dark" ? "#888" : "#555",
+    textFaint:    theme === "dark" ? "#333" : "#bbb",
+    divider:      theme === "dark" ? "#111" : "#ebebeb",
+    tabBg:        theme === "dark" ? "#0d0d0d" : "#e8e8e6",
+    tabActiveBg:  theme === "dark" ? "#161616" : "#fff",
+    tabActiveText:theme === "dark" ? "#f0f0f0" : "#0d0d0d",
+    emptyIcon:    theme === "dark" ? "#222" : "#ccc",
+    scanLine:     theme === "dark" ? "rgba(83,74,183,0.03)" : "rgba(83,74,183,0.02)",
   };
 
   const fetchAndAnalyze = async () => {
@@ -98,6 +61,7 @@ export default function Home() {
     setAnalyzing(false);
     setEmails([]);
     setFetchError(null);
+    setAnalysisProgress(0);
     try {
       const res = await fetch("/api/gmail");
       if (!res.ok) throw new Error(`Gmail fetch failed: ${res.status}`);
@@ -110,12 +74,22 @@ export default function Home() {
       setEmails(fetched);
       setLoading(false);
       setAnalyzing(true);
+
+      // Animate progress bar during analysis
+      let prog = 0;
+      const progInterval = setInterval(() => {
+        prog = Math.min(prog + Math.random() * 8, 85);
+        setAnalysisProgress(prog);
+      }, 200);
+
       const emailTexts = fetched.map((email: any) => `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`);
       const analysisRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: emailTexts }),
       });
+      clearInterval(progInterval);
+      setAnalysisProgress(100);
       if (!analysisRes.ok) throw new Error(`Analysis failed: ${analysisRes.status}`);
       const analysisData = await analysisRes.json();
       if (analysisData.error) throw new Error(analysisData.error);
@@ -125,7 +99,6 @@ export default function Home() {
       const newUsage = {
         analyzed: usage.analyzed + updated.length,
         tasks: usage.tasks + updated.reduce((acc: number, e: any) => acc + (e.tasks?.length || 0), 0),
-        replies: usage.replies,
       };
       setUsage(newUsage);
       localStorage.setItem("veltro_usage", JSON.stringify(newUsage));
@@ -155,207 +128,311 @@ export default function Home() {
   const allAtRiskEmails = emails.filter(e => e.riskLevel === "high");
   const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
   const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
+  const awaitingCount = emails.filter(e => e.awaitingReply).length;
   const isWorking = loading || analyzing;
+
+  // Urgency score: used to sort At Risk emails (deadlines first, then awaiting)
+  const getUrgencyScore = (email: any) => {
+    let score = 0;
+    if (email.deadline) score += 10;
+    if (email.awaitingReply) score += 5;
+    if (email.category === "Important") score += 3;
+    if (email.category === "Action Needed") score += 2;
+    return score;
+  };
+
+  const sortedAtRisk = [...atRiskEmails].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
+
+  const renderRiskBadge = (email: any) => {
+    if (email.deadline && email.awaitingReply) return (
+      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.2)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE + NO REPLY</span>
+    );
+    if (email.deadline) return (
+      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE</span>
+    );
+    if (email.awaitingReply) return (
+      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,159,39,0.15)", color: "#EF9F27", fontWeight: 700, letterSpacing: "0.05em" }}>NO REPLY 48H</span>
+    );
+    return <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.12)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>HIGH RISK</span>;
+  };
 
   const renderEmailCard = (email: any, i: number, isAtRisk = false) => {
     const globalIdx = emails.indexOf(email);
     const isOpen = expanded === globalIdx;
-    const borderColor = isAtRisk ? "#E24B4A" : cat[email.category as keyof typeof cat]?.border || "#3a3a3a";
-    const bgColor = isAtRisk ? "rgba(226,75,74,0.05)" : d.cardBg;
-    const borderStyle = isAtRisk ? "1px solid rgba(226,75,74,0.3)" : `1px solid ${d.cardBorder}`;
+    const borderColor = isAtRisk ? "#E24B4A" : cat[email.category as keyof typeof cat]?.border || "#2a2a2a";
+    const bgColor = isAtRisk
+      ? (theme === "dark" ? "rgba(226,75,74,0.04)" : "rgba(226,75,74,0.03)")
+      : d.cardBg;
 
     return (
-      <div key={globalIdx} style={{ background: bgColor, border: borderStyle, borderLeft: `3px solid ${borderColor}`, borderRadius: "12px", marginBottom: "8px", overflow: "hidden", cursor: "pointer" }}
-        onClick={() => setExpanded(isOpen ? null : globalIdx)}>
-        <div style={{ padding: "1rem 1.25rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px", marginBottom: "3px" }}>
-            <strong style={{ fontSize: "0.88rem", fontWeight: 500, color: d.text, lineHeight: 1.4 }}>{email.subject}</strong>
-            {isAtRisk ? (
-              <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", whiteSpace: "nowrap", flexShrink: 0 }}>HIGH RISK</span>
-            ) : email.category && (
-              <span style={{ fontSize: "0.68rem", padding: "3px 8px", borderRadius: "5px", fontWeight: 500, whiteSpace: "nowrap", flexShrink: 0, background: cat[email.category as keyof typeof cat]?.bg, color: cat[email.category as keyof typeof cat]?.text }}>
-                {email.category}
+      <div
+        key={globalIdx}
+        style={{
+          background: bgColor,
+          border: `1px solid ${isAtRisk ? "rgba(226,75,74,0.2)" : d.cardBorder}`,
+          borderLeft: `2px solid ${borderColor}`,
+          borderRadius: "10px",
+          marginBottom: "6px",
+          overflow: "hidden",
+          cursor: "pointer",
+          transition: "border-color 0.15s, background 0.15s",
+        }}
+        onClick={() => setExpanded(isOpen ? null : globalIdx)}
+      >
+        <div style={{ padding: "0.9rem 1.1rem" }}>
+          {/* Header row */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "4px" }}>
+            <strong style={{ fontSize: "0.87rem", fontWeight: 500, color: d.text, lineHeight: 1.35, flex: 1 }}>{email.subject}</strong>
+            <div style={{ display: "flex", gap: "5px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {isAtRisk ? renderRiskBadge(email) : email.category && email.category !== "Other" && (
+                <span style={{
+                  fontSize: "0.63rem", padding: "2px 7px", borderRadius: "4px", fontWeight: 700,
+                  letterSpacing: "0.06em",
+                  background: cat[email.category as keyof typeof cat]?.bg,
+                  color: cat[email.category as keyof typeof cat]?.text,
+                }}>
+                  {cat[email.category as keyof typeof cat]?.label}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Sender */}
+          <p style={{ fontSize: "0.73rem", color: d.textSub, marginBottom: "5px", fontFamily: "monospace" }}>{email.from}</p>
+
+          {/* Inline signals row */}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: email.snippet ? "6px" : 0 }}>
+            {email.deadline && (
+              <span style={{ fontSize: "0.72rem", color: "#E24B4A", display: "flex", alignItems: "center", gap: "3px" }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                {email.deadline}
+              </span>
+            )}
+            {email.awaitingReply && (
+              <span style={{ fontSize: "0.72rem", color: "#EF9F27", display: "flex", alignItems: "center", gap: "3px" }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EF9F27" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Awaiting reply
+              </span>
+            )}
+            {email.tasks?.length > 0 && (
+              <span style={{ fontSize: "0.72rem", color: "#7F77DD", display: "flex", alignItems: "center", gap: "3px" }}>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                {email.tasks.length} task{email.tasks.length > 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <p style={{ fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>{email.from}</p>
-          {email.deadline && <p style={{ fontSize: "0.78rem", color: "#E24B4A" }}>⏰ Deadline: {email.deadline}</p>}
-          {email.awaitingReply && (
-            <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "2px 8px", borderRadius: "4px", display: "inline-block", marginBottom: "6px" }}>⚠ No reply in 48h</span>
+
+          {/* Snippet — only for non-at-risk */}
+          {!isAtRisk && (
+            <p style={{ fontSize: "0.8rem", color: d.textMuted, lineHeight: 1.5, marginTop: "2px" }}>{email.snippet}</p>
           )}
-          {!isAtRisk && <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.snippet}</p>}
         </div>
+
+        {/* Expanded section */}
         {isOpen && (
-          <div style={{ padding: "0 1.25rem 1rem", borderTop: `1px solid ${isAtRisk ? "rgba(226,75,74,0.2)" : d.divider}` }} onClick={e => e.stopPropagation()}>
-            <div style={{ height: "1px", background: isAtRisk ? "rgba(226,75,74,0.15)" : d.divider, marginBottom: "0.75rem" }} />
+          <div
+            style={{ padding: "0 1.1rem 1rem", borderTop: `1px solid ${isAtRisk ? "rgba(226,75,74,0.15)" : d.divider}` }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ height: "1px", background: isAtRisk ? "rgba(226,75,74,0.1)" : d.divider, marginBottom: "0.8rem" }} />
+
+            {/* Summary */}
             {email.summary && (
-              <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "0.75rem" }}>
-                <div style={{ width: "16px", height: "16px", borderRadius: "4px", background: isAtRisk ? "rgba(226,75,74,0.15)" : "rgba(127,119,221,0.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: "1px" }}>
-                  <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke={isAtRisk ? "#E24B4A" : "#7F77DD"} strokeWidth="2.5"><path d="M9 12h6M9 8h6M9 16h4"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
-                </div>
-                <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.55 }}>{email.summary}</p>
+              <div style={{ marginBottom: "0.8rem", padding: "0.65rem 0.85rem", background: theme === "dark" ? "rgba(127,119,221,0.06)" : "rgba(127,119,221,0.05)", borderRadius: "8px", borderLeft: "2px solid rgba(127,119,221,0.3)" }}>
+                <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#7F77DD", marginBottom: "5px" }}>AI Summary</div>
+                <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.6 }}>{email.summary}</p>
               </div>
             )}
+
+            {/* Tasks */}
             {email.tasks?.length > 0 && (
-              <div style={{ marginBottom: "0.75rem" }}>
-                <div style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: "#EF9F27", marginBottom: "6px" }}>Tasks</div>
+              <div style={{ marginBottom: "0.5rem" }}>
+                <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#EF9F27", marginBottom: "8px" }}>Tasks</div>
                 {email.tasks.map((t: string, j: number) => (
-                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "5px" }}>
-                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#EF9F27", flexShrink: 0, marginTop: "6px", opacity: 0.6 }} />
-                    <span style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.4 }}>{t}</span>
+                  <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "6px" }}>
+                    <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#EF9F27", flexShrink: 0, marginTop: "7px", opacity: 0.7 }} />
+                    <span style={{ fontSize: "0.81rem", color: d.textMuted, lineHeight: 1.45 }}>{t}</span>
                   </div>
                 ))}
               </div>
             )}
-            <div style={{ marginTop: "0.75rem" }}>
-              {replyOpen === globalIdx ? (
-                <div>
-                  {generatingReply === globalIdx && (
-                    <div style={{ fontSize: "0.78rem", color: "#7F77DD", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
-                      <div style={{ width: "10px", height: "10px", border: "2px solid #7F77DD", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                      Generating reply...
-                    </div>
-                  )}
-                  <textarea value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Write your reply..."
-                    style={{ width: "100%", minHeight: "80px", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", color: d.text, fontSize: "0.82rem", padding: "0.6rem 0.75rem", fontFamily: "DM Sans, sans-serif", resize: "vertical", outline: "none" }} />
-                  <div style={{ display: "flex", gap: "8px", marginTop: "6px" }}>
-                    <button onClick={() => sendReply(email, globalIdx)} disabled={sending || !replyText.trim()}
-                      style={{ padding: "0.4rem 1rem", background: "#534AB7", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: sending || !replyText.trim() ? 0.5 : 1 }}>
-                      {sending ? "Sending..." : "Send"}
-                    </button>
-                    <button onClick={() => generateReply(email, globalIdx)} disabled={generatingReply === globalIdx}
-                      style={{ padding: "0.4rem 1rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer", opacity: generatingReply === globalIdx ? 0.5 : 1 }}>
-                      ✨ AI Assist
-                    </button>
-                    <button onClick={() => { setReplyOpen(null); setReplyText(""); }}
-                      style={{ padding: "0.4rem 1rem", background: "transparent", color: d.textMuted, border: `1px solid ${d.cardBorder}`, borderRadius: "6px", fontSize: "0.8rem", cursor: "pointer" }}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button onClick={() => { setReplyOpen(globalIdx); setReplyText(""); }}
-                    style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#534AB7", border: "1px solid #534AB7", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                    ↩ Reply
-                  </button>
-                  <button onClick={() => generateReply(email, globalIdx)}
-                    style={{ padding: "0.35rem 0.9rem", background: "transparent", color: "#7F77DD", border: "1px solid #7F77DD", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer" }}>
-                    ✨ AI Assist
-                  </button>
-                </div>
-              )}
-            </div>
+
+            {/* Deadline callout if present */}
+            {email.deadline && (
+              <div style={{ marginTop: "0.5rem", padding: "0.5rem 0.85rem", background: "rgba(226,75,74,0.07)", borderRadius: "7px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>Deadline: <strong>{email.deadline}</strong></span>
+              </div>
+            )}
           </div>
         )}
       </div>
     );
   };
 
+  /* ─── LANDING PAGE ─── */
   if (!session) {
     return (
       <>
         <style>{`
-          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { background: #080808; }
-          .landing { min-height: 100vh; background: #080808; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'DM Sans', sans-serif; padding: 2rem; position: relative; overflow: hidden; }
-          .grid-bg { position: fixed; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(83,74,183,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(83,74,183,0.06) 1px, transparent 1px); background-size: 48px 48px; }
-          .glow { position: fixed; top: -200px; left: 50%; transform: translateX(-50%); width: 700px; height: 500px; background: radial-gradient(ellipse, rgba(83,74,183,0.18) 0%, transparent 70%); pointer-events: none; }
-          .logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 2.5rem; }
-          .logo-icon { width: 40px; height: 40px; border-radius: 10px; background: #534AB7; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(83,74,183,0.4); }
-          .logo-text { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; }
-          .headline { font-family: 'Syne', sans-serif; font-size: clamp(2rem, 5.5vw, 3.4rem); font-weight: 800; color: #fff; text-align: center; line-height: 1.1; letter-spacing: -0.04em; margin-bottom: 1.25rem; max-width: 680px; }
-          .headline span { color: #7F77DD; }
-          .subhead { color: #666; font-size: 1.05rem; text-align: center; max-width: 420px; line-height: 1.65; margin-bottom: 2.5rem; font-weight: 300; }
-          .risk-banner { display: flex; align-items: center; gap: 10px; background: rgba(226,75,74,0.08); border: 1px solid rgba(226,75,74,0.2); border-radius: 10px; padding: 10px 16px; margin-bottom: 2rem; font-size: 0.82rem; color: #E24B4A; max-width: 420px; text-align: left; }
-          .pills { display: flex; gap: 10px; margin-bottom: 2.8rem; flex-wrap: wrap; justify-content: center; }
-          .pill { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); font-size: 0.78rem; color: #888; }
-          .signin-btn { display: flex; align-items: center; gap: 10px; padding: 0.8rem 1.8rem; background: #fff; color: #000; border: none; border-radius: 12px; cursor: pointer; font-size: 0.95rem; font-weight: 500; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.15s; box-shadow: 0 4px 24px rgba(0,0,0,0.4); }
-          .signin-btn:hover { opacity: 0.9; transform: translateY(-1px); }
-          .trust { margin-top: 1.5rem; font-size: 0.75rem; color: #333; }
+          @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body { height: 100%; }
+          body { background: #060606; font-family: 'DM Sans', sans-serif; }
+          .landing { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; position: relative; overflow: hidden; }
+          .noise { position: fixed; inset: 0; pointer-events: none; opacity: 0.025; background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E"); background-size: 128px 128px; mix-blend-mode: overlay; }
+          .grid { position: fixed; inset: 0; pointer-events: none; background-image: linear-gradient(rgba(83,74,183,0.04) 1px, transparent 1px), linear-gradient(90deg, rgba(83,74,183,0.04) 1px, transparent 1px); background-size: 44px 44px; }
+          .orb { position: fixed; border-radius: 50%; pointer-events: none; filter: blur(80px); }
+          .orb1 { width: 600px; height: 400px; top: -150px; left: 50%; transform: translateX(-50%); background: radial-gradient(ellipse, rgba(83,74,183,0.22) 0%, transparent 70%); }
+          .orb2 { width: 300px; height: 300px; bottom: 5%; right: 5%; background: radial-gradient(ellipse, rgba(226,75,74,0.1) 0%, transparent 70%); }
+          .logo-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 3rem; }
+          .logo-icon { width: 38px; height: 38px; border-radius: 9px; background: #534AB7; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 24px rgba(83,74,183,0.5); }
+          .logo-text { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 700; color: #f0f0f0; letter-spacing: -0.02em; }
+          .eyebrow { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.15em; text-transform: uppercase; color: #534AB7; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 8px; }
+          .eyebrow::before, .eyebrow::after { content: ''; flex: 1; height: 1px; background: rgba(83,74,183,0.3); max-width: 40px; }
+          .headline { font-family: 'Syne', sans-serif; font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 800; color: #f0f0f0; text-align: center; line-height: 1.05; letter-spacing: -0.04em; margin-bottom: 1.4rem; max-width: 700px; }
+          .headline em { color: #7F77DD; font-style: normal; }
+          .subhead { color: #555; font-size: 1rem; text-align: center; max-width: 400px; line-height: 1.7; margin-bottom: 2.5rem; font-weight: 300; }
+          .alert-card { background: rgba(226,75,74,0.06); border: 1px solid rgba(226,75,74,0.18); border-radius: 10px; padding: 12px 16px; margin-bottom: 2.5rem; max-width: 400px; display: flex; gap: 12px; align-items: flex-start; }
+          .alert-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
+          .alert-text { font-size: 0.8rem; color: #999; line-height: 1.6; }
+          .alert-text strong { color: #E24B4A; font-weight: 500; }
+          .features { display: flex; gap: 8px; margin-bottom: 2.5rem; flex-wrap: wrap; justify-content: center; }
+          .feature { padding: 5px 12px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); font-size: 0.75rem; color: #555; display: flex; align-items: center; gap: 5px; }
+          .feature-dot { width: 5px; height: 5px; border-radius: 50%; background: #534AB7; }
+          .signin-btn { display: flex; align-items: center; gap: 10px; padding: 0.75rem 1.75rem; background: #f0f0f0; color: #060606; border: none; border-radius: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 500; font-family: 'DM Sans', sans-serif; transition: opacity 0.15s, transform 0.15s; box-shadow: 0 4px 28px rgba(0,0,0,0.5); }
+          .signin-btn:hover { opacity: 0.92; transform: translateY(-1px); }
+          .trust-row { margin-top: 1.25rem; display: flex; gap: 16px; align-items: center; justify-content: center; }
+          .trust-item { font-size: 0.72rem; color: #2a2a2a; display: flex; align-items: center; gap: 4px; }
+          .footer-links { margin-top: 1.5rem; display: flex; gap: 16px; }
+          .footer-link { font-size: 0.72rem; color: #2a2a2a; text-decoration: none; transition: color 0.15s; }
+          .footer-link:hover { color: #555; }
         `}</style>
         <div className="landing">
-          <div className="grid-bg" />
-          <div className="glow" />
+          <div className="noise" />
+          <div className="grid" />
+          <div className="orb orb1" />
+          <div className="orb orb2" />
           <div className="logo-wrap">
             <div className="logo-icon">
-              <svg width="18" height="18" viewBox="0 0 100 130" fill="none">
+              <svg width="16" height="16" viewBox="0 0 100 130" fill="none">
                 <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
                 <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
               </svg>
             </div>
             <span className="logo-text">Veltro</span>
           </div>
+          <div className="eyebrow">For freelancers</div>
           <h1 className="headline">
-            Never miss a client deadline<br/><span>buried in your inbox</span> again
+            One missed email.<br/><em>One lost client.</em>
           </h1>
           <p className="subhead">
-            Veltro scans your Gmail and flags at-risk emails before you miss them — so you stay on top of every client, every deadline, every time.
+            Veltro scans your Gmail and surfaces every at-risk deadline before it costs you — so nothing slips through.
           </p>
-          <div className="risk-banner">
-            <span style={{ fontSize: "1.1rem" }}>⚠️</span>
-            <span><strong style={{ color: "#fff" }}>Freelancers lose clients over missed emails, not missed work.</strong> Veltro catches what you don't.</span>
+          <div className="alert-card">
+            <span className="alert-icon">⚠️</span>
+            <p className="alert-text">
+              <strong>Freelancers don't lose clients over bad work.</strong> They lose them over missed follow-ups, buried deadlines, and forgotten emails. Veltro fixes that.
+            </p>
           </div>
-          <div className="pills">
-            {["At Risk Deadline Alerts", "AI Task Extraction", "Smart Summaries", "AI Assist"].map(l => (
-              <div key={l} className="pill">{l}</div>
+          <div className="features">
+            {[
+              "At Risk Radar",
+              "Deadline Detection",
+              "AI Summaries",
+              "Task Extraction",
+              "Smart Categories",
+              "Awaiting Reply",
+            ].map(l => (
+              <div key={l} className="feature">
+                <div className="feature-dot" />
+                {l}
+              </div>
             ))}
           </div>
           <button className="signin-btn" onClick={() => signIn("google")}>
-            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Sign in with Google
+            <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.43-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Connect Gmail — it's free
           </button>
-          <p className="trust">Read-only access · Your data is never stored</p>
-          <div style={{ marginTop: "1rem", display: "flex", gap: "16px" }}>
-            <a href="/privacy" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Privacy Policy</a>
-            <a href="/terms" style={{ fontSize: "0.75rem", color: "#444", textDecoration: "none" }}>Terms of Service</a>
+          <div className="trust-row">
+            <span className="trust-item">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2a2a2a" strokeWidth="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Read-only access
+            </span>
+            <span style={{ color: "#1a1a1a", fontSize: "0.72rem" }}>·</span>
+            <span className="trust-item">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2a2a2a" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              No email storage
+            </span>
+            <span style={{ color: "#1a1a1a", fontSize: "0.72rem" }}>·</span>
+            <span className="trust-item">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#2a2a2a" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              60s setup
+            </span>
+          </div>
+          <div className="footer-links">
+            <a href="/privacy" className="footer-link">Privacy Policy</a>
+            <a href="/terms" className="footer-link">Terms of Service</a>
           </div>
         </div>
       </>
     );
   }
 
+  /* ─── APP ─── */
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:wght@300;400;500&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@600;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         body { background: ${d.bg}; transition: background 0.2s; }
-        .theme-btn { position: relative; }
-        .theme-btn:hover::after { content: attr(title); position: absolute; bottom: -28px; left: 50%; transform: translateX(-50%); background: #222; color: #fff; font-size: 0.7rem; padding: 3px 8px; border-radius: 5px; white-space: nowrap; pointer-events: none; font-family: 'DM Sans', sans-serif; z-index: 99; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .email-card:hover { border-color: rgba(83,74,183,0.25) !important; }
+        .risk-card:hover { border-color: rgba(226,75,74,0.35) !important; }
+        .theme-btn:hover { opacity: 0.75; }
       `}</style>
 
       <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s", paddingBottom: "70px" }}>
 
         {/* TRIAL BANNER */}
         {trialActive && (
-          <div style={{ position: "fixed", top: 0, left: 0, right: 0, background: "linear-gradient(135deg, #534AB7, #7F77DD)", padding: "0.5rem 2rem", textAlign: "center", fontSize: "0.78rem", color: "#fff", zIndex: 30 }}>
-            🎉 Free trial — {trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left · <span style={{ textDecoration: "underline", cursor: "pointer" }} onClick={() => setShowUpgrade(true)}>Upgrade to keep access</span>
+          <div style={{ background: "linear-gradient(135deg, #534AB7, #7F77DD)", padding: "0.45rem 2rem", textAlign: "center", fontSize: "0.75rem", color: "rgba(255,255,255,0.9)", letterSpacing: "0.01em" }}>
+            🎉 Trial active — <strong>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left</strong> ·{" "}
+            <span style={{ textDecoration: "underline", cursor: "pointer", opacity: 0.8 }} onClick={() => setShowUpgrade(true)}>Upgrade to keep Pro access</span>
           </div>
         )}
 
         {/* NAV */}
-        <nav style={{ borderBottom: `1px solid ${d.navBorder}`, padding: "0.85rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: trialActive ? "32px" : 0, background: d.navBg, backdropFilter: "blur(12px)", zIndex: 10 }}>
+        <nav style={{
+          borderBottom: `1px solid ${d.navBorder}`,
+          padding: "0.8rem 1.75rem",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          position: "sticky", top: trialActive ? "30px" : 0,
+          background: d.navBg, backdropFilter: "blur(16px)", zIndex: 10,
+        }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div style={{ width: "28px", height: "28px", borderRadius: "7px", background: "#534AB7", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <svg width="13" height="13" viewBox="0 0 100 130" fill="none">
+            <div style={{ width: "26px", height: "26px", borderRadius: "6px", background: "#534AB7", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <svg width="12" height="12" viewBox="0 0 100 130" fill="none">
                 <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#7F77DD"/>
                 <polygon points="40,130 60,130 100,0 72,0" fill="#534AB7"/>
               </svg>
             </div>
-            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1rem", color: d.text, letterSpacing: "-0.01em" }}>Veltro</span>
+            <span style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "0.95rem", color: d.text, letterSpacing: "-0.01em" }}>Veltro</span>
+            {isPro && (
+              <span style={{ fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.1em", color: "#7F77DD", background: "rgba(127,119,221,0.1)", padding: "2px 6px", borderRadius: "4px", border: "1px solid rgba(127,119,221,0.2)" }}>PRO</span>
+            )}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
-              <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark theme"
-                style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "dark" ? "#1a1a2e" : "#e8e8e8", border: theme === "dark" ? "2px solid #7F77DD" : "2px solid #ccc", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#7F77DD" : "#999"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            {/* Theme toggle */}
+            <div style={{ display: "flex", gap: "3px", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", padding: "3px" }}>
+              <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark"
+                style={{ width: "26px", height: "26px", borderRadius: "5px", background: theme === "dark" ? "#1a1a2e" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme === "dark" ? "#7F77DD" : d.textFaint} strokeWidth="2" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
               </button>
-              <button className="theme-btn" onClick={() => toggleTheme("light")} title="Light theme"
-                style={{ width: "30px", height: "30px", borderRadius: "50%", background: theme === "light" ? "#fffbe6" : "#1a1a1a", border: theme === "light" ? "2px solid #7F77DD" : "2px solid #333", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <button className="theme-btn" onClick={() => toggleTheme("light")} title="Light"
+                style={{ width: "26px", height: "26px", borderRadius: "5px", background: theme === "light" ? "#fffbe6" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={theme === "light" ? "#f59e0b" : d.textFaint} strokeWidth="2" strokeLinecap="round">
                   <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
                   <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
                   <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
@@ -363,153 +440,172 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <span style={{ fontSize: "0.82rem", color: d.textSub }}>{session.user?.email}</span>
-            <button onClick={() => signOut()} style={{ padding: "0.3rem 0.85rem", fontSize: "0.78rem", border: `1px solid ${d.navBorder}`, borderRadius: "6px", background: "transparent", color: d.textMuted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+            <span style={{ fontSize: "0.78rem", color: d.textSub, display: "none" }} className="email-display">{session.user?.email}</span>
+            <button onClick={() => signOut()} style={{ padding: "0.28rem 0.75rem", fontSize: "0.75rem", border: `1px solid ${d.navBorder}`, borderRadius: "6px", background: "transparent", color: d.textMuted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               Sign out
             </button>
           </div>
         </nav>
 
-        <div style={{ maxWidth: "720px", margin: "0 auto", padding: "2.5rem 1.5rem" }}>
+        <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1.25rem" }}>
 
           {/* TABS */}
-          <div style={{ display: "flex", gap: "4px", marginBottom: "2rem", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "10px", padding: "4px", width: "fit-content" }}>
+          <div style={{ display: "flex", gap: "3px", marginBottom: "1.75rem", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "9px", padding: "3px", width: "fit-content" }}>
             {(["inbox", "activity"] as const).map(t => (
-              <button key={t} onClick={() => setActiveTab(t)} style={{ padding: "0.4rem 1rem", borderRadius: "7px", fontSize: "0.82rem", cursor: "pointer", border: "none", background: activeTab === t ? d.tabActiveBg : "transparent", color: activeTab === t ? d.tabActiveText : d.textFaint, fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s", textTransform: "capitalize" }}>
+              <button key={t} onClick={() => setActiveTab(t)} style={{
+                padding: "0.35rem 0.9rem", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer",
+                border: "none", background: activeTab === t ? d.tabActiveBg : "transparent",
+                color: activeTab === t ? d.tabActiveText : d.textFaint,
+                fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s", textTransform: "capitalize",
+                fontWeight: activeTab === t ? 500 : 400,
+              }}>
                 {t}
               </button>
             ))}
           </div>
 
-          {/* ACTIVITY TAB */}
+          {/* ── ACTIVITY TAB ── */}
           {activeTab === "activity" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px", marginBottom: "2rem" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "1.5rem" }}>
                 {[
-                  { num: usage.analyzed, label: "Emails analyzed", color: "#7F77DD" },
-                  { num: usage.tasks, label: "Tasks extracted", color: "#EF9F27" },
-                  { num: usage.replies, label: "Replies sent", color: "#E24B4A" },
-                ].map(({ num, label, color }) => (
-                  <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.25rem" }}>
-                    <div style={{ fontSize: "2.2rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{num}</div>
-                    <div style={{ fontSize: "0.78rem", color: d.textSub, marginTop: "6px" }}>{label}</div>
+                  { num: usage.analyzed, label: "Emails analyzed", color: "#7F77DD", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="1.8"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> },
+                  { num: usage.tasks, label: "Tasks extracted", color: "#EF9F27", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF9F27" strokeWidth="1.8"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> },
+                  { num: allAtRiskEmails.length, label: "At Risk flagged", color: "#E24B4A", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="1.8"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> },
+                  { num: awaitingCount, label: "Awaiting reply", color: "#55b3a0", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#55b3a0" strokeWidth="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> },
+                ].map(({ num, label, color, icon }) => (
+                  <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "10px", padding: "1.1rem 1.2rem", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <div style={{ fontSize: "2rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{num}</div>
+                      <div style={{ opacity: 0.6 }}>{icon}</div>
+                    </div>
+                    <div style={{ fontSize: "0.75rem", color: d.textSub }}>{label}</div>
                   </div>
                 ))}
               </div>
+
               {!isPro && (
-                <div style={{ fontSize: "0.78rem", color: d.textMuted, lineHeight: 1.6, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
-                  <span>{trialActive ? `Trial plan · ${trialDaysLeft} days left` : `Free plan · ${FREE_AT_RISK_LIMIT} At Risk alerts per session · 20 emails/day`}</span>
-                  <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.3rem 0.8rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
+                <div style={{ fontSize: "0.78rem", color: d.textMuted, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "10px", padding: "0.9rem 1.2rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
+                  <span>{trialActive ? `Trial · ${trialDaysLeft} days left` : `Free plan · ${FREE_AT_RISK_LIMIT} At Risk · 20 emails/day`}</span>
+                  <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.3rem 0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'DM Sans', sans-serif" }}>
                     Go Pro ✨
                   </button>
-                </div>
-              )}
-              {usage.analyzed > 0 && (
-                <div style={{ marginTop: "1.5rem", background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.25rem" }}>
-                  <div style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", color: d.textFaint, marginBottom: "1rem" }}>Session breakdown</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-                    {[
-                      { label: "Emails analyzed", val: usage.analyzed, max: 20, color: "#7F77DD" },
-                      { label: "Tasks extracted", val: usage.tasks, max: Math.max(usage.tasks, 1), color: "#EF9F27" },
-                      { label: "Replies sent", val: usage.replies, max: Math.max(usage.replies, 1), color: "#E24B4A" },
-                    ].map(({ label, val, max, color }) => (
-                      <div key={label}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.78rem", color: d.textMuted, marginBottom: "4px" }}>
-                          <span>{label}</span><span>{val}</span>
-                        </div>
-                        <div style={{ height: "4px", background: d.navBorder, borderRadius: "999px", overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${Math.min((val / max) * 100, 100)}%`, background: color, borderRadius: "999px", transition: "width 0.4s ease" }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* INBOX TAB */}
+          {/* ── INBOX TAB ── */}
           {activeTab === "inbox" && (
             <>
+              {/* Stats row */}
               {emails.length > 0 && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "10px", marginBottom: "2rem" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginBottom: "1.75rem" }}>
                   {([
-                    ["Important", grouped["Important"].length, "#E24B4A"],
-                    ["Action Needed", grouped["Action Needed"].length, "#EF9F27"],
-                    ["Tasks Found", totalTasks, "#7F77DD"],
-                    ["At Risk", atRiskEmails.length, "#E24B4A"],
+                    ["Important",    grouped["Important"].length,    "#E24B4A"],
+                    ["Action Needed",grouped["Action Needed"].length,"#EF9F27"],
+                    ["Tasks",        totalTasks,                     "#7F77DD"],
+                    ["At Risk",      atRiskEmails.length,            "#E24B4A"],
                   ] as [string, number, string][]).map(([label, count, color]) => (
-                    <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "12px", padding: "1.1rem 1.25rem" }}>
-                      <div style={{ fontSize: "1.8rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{count}</div>
-                      <div style={{ fontSize: "0.75rem", color: d.textSub, marginTop: "4px" }}>{label}</div>
+                    <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "9px", padding: "0.9rem 1rem" }}>
+                      <div style={{ fontSize: "1.6rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{count}</div>
+                      <div style={{ fontSize: "0.7rem", color: d.textSub, marginTop: "3px" }}>{label}</div>
                     </div>
                   ))}
                 </div>
               )}
 
+              {/* Analysis progress */}
               {analyzing && (
-                <div style={{ marginBottom: "1.5rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: d.textSub, marginBottom: "6px" }}>
-                    <span>Analyzing with AI...</span>
-                    <span>{emails.filter(e => e.category).length} / {emails.length}</span>
+                <div style={{ marginBottom: "1.25rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: d.textSub, marginBottom: "5px" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#7F77DD", animation: "pulse-dot 1s ease infinite" }} />
+                      Analyzing with AI...
+                    </span>
+                    <span>{Math.round(analysisProgress)}%</span>
                   </div>
-                  <div style={{ height: "3px", background: d.navBorder, borderRadius: "999px", overflow: "hidden" }}>
-                    <div style={{ height: "100%", background: "linear-gradient(90deg, #534AB7, #7F77DD)", borderRadius: "999px", transition: "width 0.4s ease", width: `${emails.length > 0 ? (emails.filter(e => e.category).length / emails.length) * 100 : 0}%` }} />
+                  <div style={{ height: "2px", background: d.navBorder, borderRadius: "999px", overflow: "hidden" }}>
+                    <div style={{ height: "100%", background: "linear-gradient(90deg, #534AB7, #7F77DD)", borderRadius: "999px", transition: "width 0.3s ease", width: `${analysisProgress}%` }} />
                   </div>
                 </div>
               )}
 
-              <button onClick={fetchAndAnalyze} disabled={isWorking} style={{ padding: "0.6rem 1.4rem", background: theme === "dark" ? "#fff" : "#111", color: theme === "dark" ? "#000" : "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.88rem", fontWeight: 500, fontFamily: "'DM Sans', sans-serif", marginBottom: "2rem", display: "inline-flex", alignItems: "center", gap: "8px", opacity: isWorking ? 0.5 : 1 }}>
-                {isWorking && <div style={{ width: "14px", height: "14px", border: "2px solid #333", borderTopColor: "#666", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />}
-                {loading ? "Fetching emails..." : analyzing ? "Analyzing..." : "Refresh inbox"}
+              {/* Refresh button */}
+              <button onClick={fetchAndAnalyze} disabled={isWorking} style={{
+                padding: "0.55rem 1.25rem",
+                background: theme === "dark" ? "#f0f0f0" : "#0d0d0d",
+                color: theme === "dark" ? "#060606" : "#f0f0f0",
+                border: "none", borderRadius: "7px", cursor: "pointer",
+                fontSize: "0.82rem", fontWeight: 500,
+                fontFamily: "'DM Sans', sans-serif",
+                marginBottom: "1.75rem",
+                display: "inline-flex", alignItems: "center", gap: "7px",
+                opacity: isWorking ? 0.45 : 1,
+                transition: "opacity 0.15s",
+              }}>
+                {isWorking && <div style={{ width: "12px", height: "12px", border: `2px solid ${theme === "dark" ? "#333" : "#aaa"}`, borderTopColor: theme === "dark" ? "#888" : "#444", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />}
+                {loading ? "Fetching inbox..." : analyzing ? "Analyzing..." : "↻ Refresh inbox"}
               </button>
 
+              {/* Error state */}
               {fetchError && (
-                <div style={{ background: "rgba(226,75,74,0.08)", border: "1px solid rgba(226,75,74,0.3)", borderRadius: "12px", padding: "1rem 1.25rem", marginBottom: "1.5rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
+                <div style={{ background: "rgba(226,75,74,0.06)", border: "1px solid rgba(226,75,74,0.2)", borderRadius: "10px", padding: "0.9rem 1.1rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                   <div>
-                    <div style={{ fontSize: "0.85rem", color: "#E24B4A", fontWeight: 500, marginBottom: "2px" }}>Couldn't load your inbox</div>
-                    <div style={{ fontSize: "0.75rem", color: d.textMuted }}>{fetchError}</div>
+                    <div style={{ fontSize: "0.83rem", color: "#E24B4A", fontWeight: 500, marginBottom: "2px" }}>Couldn't load your inbox</div>
+                    <div style={{ fontSize: "0.72rem", color: d.textMuted }}>{fetchError}</div>
                   </div>
-                  <button onClick={fetchAndAnalyze} style={{ padding: "0.35rem 0.9rem", background: "#E24B4A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.78rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
-                    Try again
+                  <button onClick={fetchAndAnalyze} style={{ padding: "0.32rem 0.8rem", background: "#E24B4A", color: "#fff", border: "none", borderRadius: "6px", fontSize: "0.75rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", whiteSpace: "nowrap" }}>
+                    Retry
                   </button>
                 </div>
               )}
 
+              {/* Empty state */}
               {emails.length === 0 && !isWorking && !fetchError && (
                 <div style={{ textAlign: "center", padding: "5rem 0" }}>
-                  <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: d.statBg, border: `1px solid ${d.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={d.emptyIcon} strokeWidth="1.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                  <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: d.statBg, border: `1px solid ${d.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.85rem" }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={d.emptyIcon} strokeWidth="1.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </div>
-                  <p style={{ fontSize: "0.9rem", color: d.textFaint }}>No emails loaded yet.</p>
+                  <p style={{ fontSize: "0.85rem", color: d.textFaint }}>No emails loaded yet</p>
                 </div>
               )}
 
-              {atRiskEmails.length > 0 && (
+              {/* ── AT RISK SECTION ── */}
+              {sortedAtRisk.length > 0 && (
                 <div style={{ marginBottom: "2rem" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
-                    <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#E24B4A", flexShrink: 0 }} />
-                    <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#E24B4A" }}>⚠ At Risk</span>
-                    <span style={{ fontSize: "0.7rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 7px", borderRadius: "999px" }}>{atRiskEmails.length}</span>
-                    {!isPro && <span style={{ fontSize: "0.68rem", color: d.textFaint, marginLeft: "4px" }}>Free preview · {FREE_AT_RISK_LIMIT} of {allAtRiskEmails.length}</span>}
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#E24B4A", animation: "pulse-dot 2s ease infinite" }} />
+                    <span style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#E24B4A" }}>At Risk</span>
+                    <span style={{ fontSize: "0.67rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>{sortedAtRisk.length}</span>
+                    {!isPro && allAtRiskEmails.length > FREE_AT_RISK_LIMIT && (
+                      <span style={{ fontSize: "0.65rem", color: d.textFaint, marginLeft: "2px" }}>showing {FREE_AT_RISK_LIMIT} of {allAtRiskEmails.length}</span>
+                    )}
                   </div>
-                  {atRiskEmails.map((email, i) => renderEmailCard(email, i, true))}
+                  {sortedAtRisk.map((email, i) => renderEmailCard(email, i, true))}
                   {atRiskHidden > 0 && (
-                    <div onClick={() => setShowUpgrade(true)} style={{ background: "rgba(226,75,74,0.04)", border: "1px dashed rgba(226,75,74,0.3)", borderRadius: "12px", padding: "0.85rem 1.25rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontSize: "0.82rem", color: "#E24B4A" }}>+{atRiskHidden} more At Risk email{atRiskHidden > 1 ? "s" : ""} hidden</span>
-                      <span style={{ fontSize: "0.78rem", color: "#7F77DD", fontWeight: 500 }}>Upgrade to see all →</span>
+                    <div onClick={() => setShowUpgrade(true)} style={{
+                      background: "rgba(226,75,74,0.03)", border: "1px dashed rgba(226,75,74,0.25)",
+                      borderRadius: "10px", padding: "0.8rem 1.1rem", cursor: "pointer",
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                    }}>
+                      <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>+{atRiskHidden} more At Risk email{atRiskHidden > 1 ? "s" : ""} hidden</span>
+                      <span style={{ fontSize: "0.75rem", color: "#7F77DD", fontWeight: 500 }}>Upgrade to unlock →</span>
                     </div>
                   )}
                 </div>
               )}
 
+              {/* ── CATEGORIZED SECTIONS ── */}
               {(["Important", "Action Needed", "Other"] as const).map((section) =>
                 grouped[section].length > 0 && (
-                  <div key={section} style={{ marginBottom: "2rem" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.75rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
-                      <div style={{ width: "6px", height: "6px", borderRadius: "50%", background: cat[section].dot, flexShrink: 0 }} />
-                      <span style={{ fontSize: "0.7rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: d.textFaint }}>{section}</span>
-                      <span style={{ fontSize: "0.7rem", color: d.textFaint, background: d.statBg, padding: "1px 7px", borderRadius: "999px" }}>{grouped[section].length}</span>
+                  <div key={section} style={{ marginBottom: "1.75rem" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+                      <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: cat[section].dot, flexShrink: 0 }} />
+                      <span style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: section === "Other" ? d.textFaint : cat[section].text }}>
+                        {section}
+                      </span>
+                      <span style={{ fontSize: "0.67rem", color: d.textFaint, background: d.statBg, padding: "1px 6px", borderRadius: "4px" }}>{grouped[section].length}</span>
                     </div>
                     {grouped[section].map((email, i) => renderEmailCard(email, i, false))}
                   </div>
@@ -520,63 +616,81 @@ export default function Home() {
         </div>
 
         {/* UPGRADE BAR */}
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme === "dark" ? "rgba(8,8,8,0.95)" : "rgba(255,255,255,0.95)", borderTop: `1px solid ${d.navBorder}`, padding: "0.75rem 2rem", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20, backdropFilter: "blur(12px)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{ width: "32px", height: "32px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.8rem", color: "#fff", fontWeight: 700 }}>
+        <div style={{
+          position: "fixed", bottom: 0, left: 0, right: 0,
+          background: theme === "dark" ? "rgba(6,6,6,0.96)" : "rgba(242,242,240,0.96)",
+          borderTop: `1px solid ${d.navBorder}`,
+          padding: "0.65rem 1.75rem",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          zIndex: 20, backdropFilter: "blur(16px)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+            <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#fff", fontWeight: 700, flexShrink: 0 }}>
               {session.user?.email?.[0]?.toUpperCase()}
             </div>
             <div>
-              <div style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
-              <div style={{ fontSize: "0.68rem", color: d.textSub }}>
-                {isPro ? "Pro plan · Unlimited emails" : trialActive ? `Trial · ${trialDaysLeft} days left` : `Free plan · 20 emails/day · ${FREE_AT_RISK_LIMIT} At Risk alerts`}
+              <div style={{ fontSize: "0.75rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
+              <div style={{ fontSize: "0.65rem", color: d.textSub }}>
+                {isPro ? "Pro · Unlimited" : trialActive ? `Trial · ${trialDaysLeft}d left` : `Free · ${FREE_AT_RISK_LIMIT} alerts · 20 emails/day`}
               </div>
             </div>
           </div>
           {!isPro && (
-            <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.45rem 1.1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "8px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 12px rgba(83,74,183,0.4)" }}>
-              Upgrade to Pro ✨
+            <button onClick={() => setShowUpgrade(true)} style={{
+              padding: "0.42rem 1rem",
+              background: "linear-gradient(135deg, #534AB7, #7F77DD)",
+              color: "#fff", border: "none", borderRadius: "7px",
+              fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
+              fontFamily: "'DM Sans', sans-serif",
+              boxShadow: "0 2px 14px rgba(83,74,183,0.35)",
+            }}>
+              Upgrade ✨
             </button>
           )}
         </div>
 
         {/* UPGRADE POPUP */}
         {showUpgrade && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} onClick={() => setShowUpgrade(false)}>
-            <div style={{ background: theme === "dark" ? "#0c0c0c" : "#fff", border: `1px solid ${d.cardBorder}`, borderRadius: "20px", padding: "2rem", maxWidth: "380px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} onClick={() => setShowUpgrade(false)}>
+            <div style={{ background: theme === "dark" ? "#0a0a0a" : "#fff", border: `1px solid ${d.cardBorder}`, borderRadius: "18px", padding: "1.75rem", maxWidth: "360px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-                <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 1rem" }}>
-                  <svg width="20" height="20" viewBox="0 0 100 130" fill="none">
+                <div style={{ width: "44px", height: "44px", borderRadius: "11px", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.9rem" }}>
+                  <svg width="18" height="18" viewBox="0 0 100 130" fill="none">
                     <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#fff"/>
                   </svg>
                 </div>
-                <div style={{ fontSize: "1.4rem", fontWeight: 700, color: d.text, fontFamily: "'Syne', sans-serif", marginBottom: "0.25rem" }}>Veltro Pro</div>
-                <div style={{ fontSize: "0.85rem", color: d.textSub, marginBottom: "1rem" }}>Never miss a client deadline again</div>
-                <div style={{ fontSize: "2.2rem", fontWeight: 800, color: "#7F77DD", letterSpacing: "-0.02em" }}>NZ$29.99<span style={{ fontSize: "1rem", fontWeight: 400, color: d.textSub }}>/month</span></div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, color: d.text, fontFamily: "'Syne', sans-serif", marginBottom: "0.25rem" }}>Veltro Pro</div>
+                <div style={{ fontSize: "0.8rem", color: d.textSub, marginBottom: "1rem" }}>Never miss a client deadline again</div>
+                <div style={{ fontSize: "2rem", fontWeight: 800, color: "#7F77DD", letterSpacing: "-0.02em" }}>
+                  NZ$29.99<span style={{ fontSize: "0.9rem", fontWeight: 400, color: d.textSub }}>/month</span>
+                </div>
               </div>
-              <div style={{ marginBottom: "1.5rem" }}>
+              <div style={{ marginBottom: "1.4rem" }}>
                 {[
                   { icon: "⚠️", text: "Unlimited At Risk deadline alerts" },
-                  { icon: "📧", text: "Unlimited email analysis every day" },
-                  { icon: "✨", text: "AI Assist — replies in your voice" },
-                  { icon: "🎯", text: "Smarter priority categorization" },
+                  { icon: "📧", text: "Unlimited email analysis, every day" },
+                  { icon: "🎯", text: "Priority categorization — smarter flags" },
+                  { icon: "⏰", text: "Deadline + awaiting reply detection" },
                 ].map(({ icon, text }) => (
-                  <div key={text} style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "0.85rem" }}>
-                    <span style={{ fontSize: "1rem" }}>{icon}</span>
-                    <span style={{ fontSize: "0.85rem", color: d.textMuted }}>{text}</span>
+                  <div key={text} style={{ display: "flex", alignItems: "center", gap: "11px", marginBottom: "0.8rem" }}>
+                    <span style={{ fontSize: "0.95rem" }}>{icon}</span>
+                    <span style={{ fontSize: "0.82rem", color: d.textMuted }}>{text}</span>
                   </div>
                 ))}
               </div>
-              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", width: "100%", padding: "0.75rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "12px", fontSize: "0.92rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.4)" }}>
-                Upgrade to Pro — NZ$29.99/mo
+              <a
+                href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8"
+                target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", width: "100%", padding: "0.7rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.35)" }}
+              >
+                Upgrade — NZ$29.99/mo
               </a>
-              <button onClick={() => setShowUpgrade(false)} style={{ width: "100%", marginTop: "0.75rem", padding: "0.5rem", background: "transparent", border: "none", color: d.textFaint, fontSize: "0.8rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
+              <button onClick={() => setShowUpgrade(false)} style={{ width: "100%", marginTop: "0.6rem", padding: "0.45rem", background: "transparent", border: "none", color: d.textFaint, fontSize: "0.75rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
                 Maybe later
               </button>
             </div>
           </div>
         )}
-
       </div>
     </>
   );
