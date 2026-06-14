@@ -10,6 +10,16 @@ const cat = {
 
 const FREE_AT_RISK_LIMIT = 5;
 
+const decodeHtml = (text: string) => {
+  if (!text) return text;
+  return text
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+};
+
 export default function Home() {
   const { data: session } = useSession();
   const [emails, setEmails] = useState<any[]>([]);
@@ -182,7 +192,7 @@ export default function Home() {
         <div style={{ padding: "0.9rem 1.1rem" }}>
           {/* Header row */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "4px" }}>
-            <strong style={{ fontSize: "0.87rem", fontWeight: 500, color: d.text, lineHeight: 1.35, flex: 1 }}>{email.subject}</strong>
+            <strong style={{ fontSize: "0.87rem", fontWeight: 500, color: d.text, lineHeight: 1.35, flex: 1 }}>{decodeHtml(email.subject)}</strong>
             <div style={{ display: "flex", gap: "5px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
               {isAtRisk ? renderRiskBadge(email) : email.category && email.category !== "Other" && (
                 <span style={{
@@ -198,14 +208,14 @@ export default function Home() {
           </div>
 
           {/* Sender */}
-          <p style={{ fontSize: "0.73rem", color: d.textSub, marginBottom: "5px", fontFamily: "monospace" }}>{email.from}</p>
+          <p style={{ fontSize: "0.73rem", color: d.textSub, marginBottom: "5px", fontFamily: "monospace" }}>{decodeHtml(email.from)}</p>
 
           {/* Inline signals row */}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: email.snippet ? "6px" : 0 }}>
             {email.deadline && (
               <span style={{ fontSize: "0.72rem", color: "#E24B4A", display: "flex", alignItems: "center", gap: "3px" }}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                {email.deadline}
+                {decodeHtml(email.deadline)}
               </span>
             )}
             {email.awaitingReply && (
@@ -224,7 +234,7 @@ export default function Home() {
 
           {/* Snippet — only for non-at-risk */}
           {!isAtRisk && (
-            <p style={{ fontSize: "0.8rem", color: d.textMuted, lineHeight: 1.5, marginTop: "2px" }}>{email.snippet}</p>
+            <p style={{ fontSize: "0.8rem", color: d.textMuted, lineHeight: 1.5, marginTop: "2px" }}>{decodeHtml(email.snippet)}</p>
           )}
         </div>
 
@@ -240,7 +250,7 @@ export default function Home() {
             {email.summary && (
               <div style={{ marginBottom: "0.8rem", padding: "0.65rem 0.85rem", background: theme === "dark" ? "rgba(127,119,221,0.06)" : "rgba(127,119,221,0.05)", borderRadius: "8px", borderLeft: "2px solid rgba(127,119,221,0.3)" }}>
                 <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#7F77DD", marginBottom: "5px" }}>AI Summary</div>
-                <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.6 }}>{email.summary}</p>
+                <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.6 }}>{decodeHtml(email.summary)}</p>
               </div>
             )}
 
@@ -251,7 +261,7 @@ export default function Home() {
                 {email.tasks.map((t: string, j: number) => (
                   <div key={j} style={{ display: "flex", alignItems: "flex-start", gap: "8px", marginBottom: "6px" }}>
                     <div style={{ width: "4px", height: "4px", borderRadius: "50%", background: "#EF9F27", flexShrink: 0, marginTop: "7px", opacity: 0.7 }} />
-                    <span style={{ fontSize: "0.81rem", color: d.textMuted, lineHeight: 1.45 }}>{t}</span>
+                    <span style={{ fontSize: "0.81rem", color: d.textMuted, lineHeight: 1.45 }}>{decodeHtml(t)}</span>
                   </div>
                 ))}
               </div>
@@ -261,7 +271,7 @@ export default function Home() {
             {email.deadline && (
               <div style={{ marginTop: "0.5rem", padding: "0.5rem 0.85rem", background: "rgba(226,75,74,0.07)", borderRadius: "7px", display: "flex", alignItems: "center", gap: "8px" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>Deadline: <strong>{email.deadline}</strong></span>
+                <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>Deadline: <strong>{decodeHtml(email.deadline)}</strong></span>
               </div>
             )}
           </div>
@@ -292,8 +302,8 @@ export default function Home() {
           .eyebrow::before, .eyebrow::after { content: ''; flex: 1; height: 1px; background: rgba(83,74,183,0.3); max-width: 40px; }
           .headline { font-family: 'Syne', sans-serif; font-size: clamp(2.2rem, 6vw, 3.8rem); font-weight: 800; color: #f0f0f0; text-align: center; line-height: 1.05; letter-spacing: -0.04em; margin-bottom: 1.4rem; max-width: 700px; }
           .headline em { color: #7F77DD; font-style: normal; }
-          .subhead { color: #555; font-size: 1rem; text-align: center; max-width: 400px; line-height: 1.7; margin-bottom: 2.5rem; font-weight: 300; }
-          .alert-card { background: rgba(226,75,74,0.06); border: 1px solid rgba(226,75,74,0.18); border-radius: 10px; padding: 12px 16px; margin-bottom: 2.5rem; max-width: 400px; display: flex; gap: 12px; align-items: flex-start; }
+          .subhead { color: #555; font-size: 1rem; text-align: center; max-width: 420px; line-height: 1.7; margin-bottom: 2.5rem; font-weight: 300; }
+          .alert-card { background: rgba(226,75,74,0.06); border: 1px solid rgba(226,75,74,0.18); border-radius: 10px; padding: 12px 16px; margin-bottom: 2.5rem; max-width: 420px; display: flex; gap: 12px; align-items: flex-start; }
           .alert-icon { font-size: 1rem; flex-shrink: 0; margin-top: 1px; }
           .alert-text { font-size: 0.8rem; color: #999; line-height: 1.6; }
           .alert-text strong { color: #E24B4A; font-weight: 500; }
@@ -322,17 +332,17 @@ export default function Home() {
             </div>
             <span className="logo-text">Veltro</span>
           </div>
-          <div className="eyebrow">For freelancers</div>
+          <div className="eyebrow">Your inbox, organized</div>
           <h1 className="headline">
             One missed email.<br/><em>One lost client.</em>
           </h1>
           <p className="subhead">
-            Veltro scans your Gmail and surfaces every at-risk deadline before it costs you — so nothing slips through.
+            Veltro scans your Gmail and surfaces every at-risk deadline before it costs you — so nothing slips through, whatever work you do.
           </p>
           <div className="alert-card">
             <span className="alert-icon">⚠️</span>
             <p className="alert-text">
-              <strong>Freelancers don't lose clients over bad work.</strong> They lose them over missed follow-ups, buried deadlines, and forgotten emails. Veltro fixes that.
+              <strong>You don't lose clients over bad work.</strong> You lose them over missed follow-ups, buried deadlines, and forgotten emails. Veltro fixes that.
             </p>
           </div>
           <div className="features">
@@ -352,7 +362,7 @@ export default function Home() {
           </div>
           <button className="signin-btn" onClick={() => signIn("google")}>
             <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.43-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-            Sign in with google
+            Continue with Google
           </button>
           <div className="trust-row">
             <span className="trust-item">
