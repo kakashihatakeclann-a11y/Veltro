@@ -2,7 +2,6 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { NextResponse } from "next/server"
 import { adminDb } from "@/lib/firebaseAdmin"
-
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) {
@@ -12,28 +11,25 @@ export async function GET() {
   if (!accessToken) {
     return NextResponse.json({ error: "No access token" }, { status: 401 })
   }
-
   const email = (session as any).user?.email
   let isPro = false
   let trialActive = false
   let trialDaysLeft = 0
-
   if (email) {
     const userRef = adminDb.collection("users").doc(email)
     const userDoc = await userRef.get()
-
     if (!userDoc.exists) {
       await userRef.set({
         isPro: false,
         trialStartDate: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+        lastActive: new Date().toISOString(),
       })
       trialActive = true
       trialDaysLeft = 7
     } else {
       const data = userDoc.data()
       isPro = data?.isPro === true
-
       if (!isPro && data?.trialStartDate) {
         const trialStart = new Date(data.trialStartDate)
         const now = new Date()
@@ -41,12 +37,11 @@ export async function GET() {
         trialDaysLeft = Math.max(0, 7 - daysSinceStart)
         trialActive = trialDaysLeft > 0
       }
+      await userRef.set({ lastActive: new Date().toISOString() }, { merge: true })
     }
   }
-
   const isProOrTrial = isPro || trialActive
   const maxResults = isProOrTrial ? 100 : 50
-
   const res = await fetch(
     `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
