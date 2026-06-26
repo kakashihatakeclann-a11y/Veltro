@@ -30,6 +30,7 @@ export default function Home() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [usage, setUsage] = useState({ analyzed: 0, tasks: 0 });
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showGoogleWarning, setShowGoogleWarning] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isPro, setIsPro] = useState(false);
   const [trialActive, setTrialActive] = useState(false);
@@ -85,7 +86,6 @@ export default function Home() {
       setLoading(false);
       setAnalyzing(true);
 
-      // Animate progress bar during analysis
       let prog = 0;
       const progInterval = setInterval(() => {
         prog = Math.min(prog + Math.random() * 8, 85);
@@ -141,7 +141,6 @@ export default function Home() {
   const awaitingCount = emails.filter(e => e.awaitingReply).length;
   const isWorking = loading || analyzing;
 
-  // Urgency score: used to sort At Risk emails (deadlines first, then awaiting)
   const getUrgencyScore = (email: any) => {
     let score = 0;
     if (email.deadline) score += 10;
@@ -190,7 +189,6 @@ export default function Home() {
         onClick={() => setExpanded(isOpen ? null : globalIdx)}
       >
         <div style={{ padding: "0.9rem 1.1rem" }}>
-          {/* Header row */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "4px" }}>
             <strong style={{ fontSize: "0.87rem", fontWeight: 500, color: d.text, lineHeight: 1.35, flex: 1 }}>{decodeHtml(email.subject)}</strong>
             <div style={{ display: "flex", gap: "5px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -206,11 +204,7 @@ export default function Home() {
               )}
             </div>
           </div>
-
-          {/* Sender */}
           <p style={{ fontSize: "0.73rem", color: d.textSub, marginBottom: "5px", fontFamily: "monospace" }}>{decodeHtml(email.from)}</p>
-
-          {/* Inline signals row */}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: email.snippet ? "6px" : 0 }}>
             {email.deadline && (
               <span style={{ fontSize: "0.72rem", color: "#E24B4A", display: "flex", alignItems: "center", gap: "3px" }}>
@@ -231,30 +225,22 @@ export default function Home() {
               </span>
             )}
           </div>
-
-          {/* Snippet — only for non-at-risk */}
           {!isAtRisk && (
             <p style={{ fontSize: "0.8rem", color: d.textMuted, lineHeight: 1.5, marginTop: "2px" }}>{decodeHtml(email.snippet)}</p>
           )}
         </div>
-
-        {/* Expanded section */}
         {isOpen && (
           <div
             style={{ padding: "0 1.1rem 1rem", borderTop: `1px solid ${isAtRisk ? "rgba(226,75,74,0.15)" : d.divider}` }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ height: "1px", background: isAtRisk ? "rgba(226,75,74,0.1)" : d.divider, marginBottom: "0.8rem" }} />
-
-            {/* Summary */}
             {email.summary && (
               <div style={{ marginBottom: "0.8rem", padding: "0.65rem 0.85rem", background: theme === "dark" ? "rgba(127,119,221,0.06)" : "rgba(127,119,221,0.05)", borderRadius: "8px", borderLeft: "2px solid rgba(127,119,221,0.3)" }}>
                 <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#7F77DD", marginBottom: "5px" }}>AI Summary</div>
                 <p style={{ fontSize: "0.82rem", color: d.textMuted, lineHeight: 1.6 }}>{decodeHtml(email.summary)}</p>
               </div>
             )}
-
-            {/* Tasks */}
             {email.tasks?.length > 0 && (
               <div style={{ marginBottom: "0.5rem" }}>
                 <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#EF9F27", marginBottom: "8px" }}>Tasks</div>
@@ -266,8 +252,6 @@ export default function Home() {
                 ))}
               </div>
             )}
-
-            {/* Deadline callout if present */}
             {email.deadline && (
               <div style={{ marginTop: "0.5rem", padding: "0.5rem 0.85rem", background: "rgba(226,75,74,0.07)", borderRadius: "7px", display: "flex", alignItems: "center", gap: "8px" }}>
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -317,6 +301,8 @@ export default function Home() {
           .footer-links { margin-top: 1.5rem; display: flex; gap: 16px; }
           .footer-link { font-size: 0.72rem; color: #2a2a2a; text-decoration: none; transition: color 0.15s; }
           .footer-link:hover { color: #555; }
+          @keyframes fadeIn { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: scale(1); } }
+          .warning-modal { animation: fadeIn 0.18s ease; }
         `}</style>
         <div className="landing">
           <div className="noise" />
@@ -346,21 +332,14 @@ export default function Home() {
             </p>
           </div>
           <div className="features">
-            {[
-              "At Risk Radar",
-              "Deadline Detection",
-              "AI Summaries",
-              "Task Extraction",
-              "Smart Categories",
-              "Awaiting Reply",
-            ].map(l => (
+            {["At Risk Radar","Deadline Detection","AI Summaries","Task Extraction","Smart Categories","Awaiting Reply"].map(l => (
               <div key={l} className="feature">
                 <div className="feature-dot" />
                 {l}
               </div>
             ))}
           </div>
-          <button className="signin-btn" onClick={() => signIn("google")}>
+          <button className="signin-btn" onClick={() => setShowGoogleWarning(true)}>
             <svg width="17" height="17" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.43-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
             Continue with Google
           </button>
@@ -385,6 +364,76 @@ export default function Home() {
             <a href="/terms" className="footer-link">Terms of Service</a>
           </div>
         </div>
+
+        {/* GOOGLE WARNING MODAL */}
+        {showGoogleWarning && (
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem", backdropFilter: "blur(6px)" }}
+            onClick={() => setShowGoogleWarning(false)}
+          >
+            <div
+              className="warning-modal"
+              style={{ background: "#0d0d0d", border: "1px solid #222", borderRadius: "20px", padding: "2rem", maxWidth: "380px", width: "100%", boxShadow: "0 32px 80px rgba(0,0,0,0.8)" }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Icon */}
+              <div style={{ width: "48px", height: "48px", borderRadius: "12px", background: "rgba(239,159,39,0.1)", border: "1px solid rgba(239,159,39,0.25)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1.25rem" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#EF9F27" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/>
+                  <line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+              </div>
+
+              {/* Title */}
+              <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "#f0f0f0", fontFamily: "'Syne', sans-serif", marginBottom: "0.5rem", letterSpacing: "-0.01em" }}>
+                Before you continue
+              </div>
+
+              {/* Body */}
+              <p style={{ fontSize: "0.84rem", color: "#777", lineHeight: 1.75, marginBottom: "1rem" }}>
+                Google is currently reviewing Veltro. On the next screen you'll see a standard security notice for apps under review.
+              </p>
+
+              {/* Steps */}
+              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid #1a1a1a", borderRadius: "12px", padding: "1rem 1.1rem", marginBottom: "1.5rem" }}>
+                {[
+                  { step: "1", text: 'Click "Advanced" at the bottom left' },
+                  { step: "2", text: 'Click "Go to Veltro (unsafe)"' },
+                  { step: "3", text: "Review Gmail read-only permissions" },
+                  { step: "4", text: "Click Allow to continue" },
+                ].map(({ step, text }) => (
+                  <div key={step} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: step === "4" ? 0 : "0.65rem" }}>
+                    <div style={{ width: "20px", height: "20px", borderRadius: "50%", background: "rgba(83,74,183,0.15)", border: "1px solid rgba(83,74,183,0.3)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "#7F77DD" }}>{step}</span>
+                    </div>
+                    <span style={{ fontSize: "0.8rem", color: "#888" }}>{text}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Security note */}
+              <div style={{ display: "flex", gap: "8px", alignItems: "flex-start", marginBottom: "1.5rem", padding: "0.75rem 1rem", background: "rgba(83,74,183,0.05)", border: "1px solid rgba(83,74,183,0.15)", borderRadius: "10px" }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#534AB7" strokeWidth="2.5" style={{ flexShrink: 0, marginTop: "1px" }}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                <span style={{ fontSize: "0.75rem", color: "#444", lineHeight: 1.6 }}>Veltro requests <strong style={{ color: "#534AB7" }}>read-only</strong> Gmail access. We never send, delete, or store your emails.</span>
+              </div>
+
+              {/* CTA */}
+              <button
+                onClick={() => { setShowGoogleWarning(false); signIn("google"); }}
+                style={{ width: "100%", padding: "0.8rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "11px", fontSize: "0.9rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 4px 20px rgba(83,74,183,0.35)", letterSpacing: "-0.01em" }}
+              >
+                Got it — continue with Google
+              </button>
+              <button
+                onClick={() => setShowGoogleWarning(false)}
+                style={{ width: "100%", marginTop: "0.6rem", padding: "0.5rem", background: "transparent", border: "none", color: "#333", fontSize: "0.75rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </>
     );
   }
@@ -405,7 +454,6 @@ export default function Home() {
 
       <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s", paddingBottom: "70px" }}>
 
-        {/* TRIAL BANNER */}
         {trialActive && (
           <div style={{ background: "linear-gradient(135deg, #534AB7, #7F77DD)", padding: "0.45rem 2rem", textAlign: "center", fontSize: "0.75rem", color: "rgba(255,255,255,0.9)", letterSpacing: "0.01em" }}>
             🎉 Trial active — <strong>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left</strong> ·{" "}
@@ -413,7 +461,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* NAV */}
         <nav style={{
           borderBottom: `1px solid ${d.navBorder}`,
           padding: "0.8rem 1.75rem",
@@ -434,7 +481,6 @@ export default function Home() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {/* Theme toggle */}
             <div style={{ display: "flex", gap: "3px", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", padding: "3px" }}>
               <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark"
                 style={{ width: "26px", height: "26px", borderRadius: "5px", background: theme === "dark" ? "#1a1a2e" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
@@ -450,7 +496,6 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <span style={{ fontSize: "0.78rem", color: d.textSub, display: "none" }} className="email-display">{session.user?.email}</span>
             <button onClick={() => signOut()} style={{ padding: "0.28rem 0.75rem", fontSize: "0.75rem", border: `1px solid ${d.navBorder}`, borderRadius: "6px", background: "transparent", color: d.textMuted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
               Sign out
             </button>
@@ -458,8 +503,6 @@ export default function Home() {
         </nav>
 
         <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1.25rem" }}>
-
-          {/* TABS */}
           <div style={{ display: "flex", gap: "3px", marginBottom: "1.75rem", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "9px", padding: "3px", width: "fit-content" }}>
             {(["inbox", "activity"] as const).map(t => (
               <button key={t} onClick={() => setActiveTab(t)} style={{
@@ -474,7 +517,6 @@ export default function Home() {
             ))}
           </div>
 
-          {/* ── ACTIVITY TAB ── */}
           {activeTab === "activity" && (
             <div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "1.5rem" }}>
@@ -493,7 +535,6 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-
               {!isPro && (
                 <div style={{ fontSize: "0.78rem", color: d.textMuted, background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "10px", padding: "0.9rem 1.2rem", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px" }}>
                   <span>{trialActive ? `Trial · ${trialDaysLeft} days left` : `Free plan · ${FREE_AT_RISK_LIMIT} At Risk · 20 emails/day`}</span>
@@ -505,17 +546,15 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── INBOX TAB ── */}
           {activeTab === "inbox" && (
             <>
-              {/* Stats row */}
               {emails.length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginBottom: "1.75rem" }}>
                   {([
-                    ["Important",    grouped["Important"].length,    "#E24B4A"],
-                    ["Action Needed",grouped["Action Needed"].length,"#EF9F27"],
-                    ["Tasks",        totalTasks,                     "#7F77DD"],
-                    ["At Risk",      atRiskEmails.length,            "#E24B4A"],
+                    ["Important", grouped["Important"].length, "#E24B4A"],
+                    ["Action Needed", grouped["Action Needed"].length, "#EF9F27"],
+                    ["Tasks", totalTasks, "#7F77DD"],
+                    ["At Risk", atRiskEmails.length, "#E24B4A"],
                   ] as [string, number, string][]).map(([label, count, color]) => (
                     <div key={label} style={{ background: d.statBg, border: `1px solid ${d.cardBorder}`, borderRadius: "9px", padding: "0.9rem 1rem" }}>
                       <div style={{ fontSize: "1.6rem", fontWeight: 700, lineHeight: 1, color, fontVariantNumeric: "tabular-nums" }}>{count}</div>
@@ -525,7 +564,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Analysis progress */}
               {analyzing && (
                 <div style={{ marginBottom: "1.25rem" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: d.textSub, marginBottom: "5px" }}>
@@ -541,7 +579,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Refresh button */}
               <button onClick={fetchAndAnalyze} disabled={isWorking} style={{
                 padding: "0.55rem 1.25rem",
                 background: theme === "dark" ? "#f0f0f0" : "#0d0d0d",
@@ -558,7 +595,6 @@ export default function Home() {
                 {loading ? "Fetching inbox..." : analyzing ? "Analyzing..." : "↻ Refresh inbox"}
               </button>
 
-              {/* Error state */}
               {fetchError && (
                 <div style={{ background: "rgba(226,75,74,0.06)", border: "1px solid rgba(226,75,74,0.2)", borderRadius: "10px", padding: "0.9rem 1.1rem", marginBottom: "1.25rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
                   <div>
@@ -571,7 +607,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* Empty state */}
               {emails.length === 0 && !isWorking && !fetchError && (
                 <div style={{ textAlign: "center", padding: "5rem 0" }}>
                   <div style={{ width: "44px", height: "44px", borderRadius: "10px", background: d.statBg, border: `1px solid ${d.cardBorder}`, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.85rem" }}>
@@ -581,7 +616,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ── AT RISK SECTION ── */}
               {sortedAtRisk.length > 0 && (
                 <div style={{ marginBottom: "2rem" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
@@ -594,11 +628,7 @@ export default function Home() {
                   </div>
                   {sortedAtRisk.map((email, i) => renderEmailCard(email, i, true))}
                   {atRiskHidden > 0 && (
-                    <div onClick={() => setShowUpgrade(true)} style={{
-                      background: "rgba(226,75,74,0.03)", border: "1px dashed rgba(226,75,74,0.25)",
-                      borderRadius: "10px", padding: "0.8rem 1.1rem", cursor: "pointer",
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                    }}>
+                    <div onClick={() => setShowUpgrade(true)} style={{ background: "rgba(226,75,74,0.03)", border: "1px dashed rgba(226,75,74,0.25)", borderRadius: "10px", padding: "0.8rem 1.1rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>+{atRiskHidden} more At Risk email{atRiskHidden > 1 ? "s" : ""} hidden</span>
                       <span style={{ fontSize: "0.75rem", color: "#7F77DD", fontWeight: 500 }}>Upgrade to unlock →</span>
                     </div>
@@ -606,7 +636,6 @@ export default function Home() {
                 </div>
               )}
 
-              {/* ── CATEGORIZED SECTIONS ── */}
               {(["Important", "Action Needed", "Other"] as const).map((section) =>
                 grouped[section].length > 0 && (
                   <div key={section} style={{ marginBottom: "1.75rem" }}>
@@ -625,15 +654,7 @@ export default function Home() {
           )}
         </div>
 
-        {/* UPGRADE BAR */}
-        <div style={{
-          position: "fixed", bottom: 0, left: 0, right: 0,
-          background: theme === "dark" ? "rgba(6,6,6,0.96)" : "rgba(242,242,240,0.96)",
-          borderTop: `1px solid ${d.navBorder}`,
-          padding: "0.65rem 1.75rem",
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          zIndex: 20, backdropFilter: "blur(16px)",
-        }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme === "dark" ? "rgba(6,6,6,0.96)" : "rgba(242,242,240,0.96)", borderTop: `1px solid ${d.navBorder}`, padding: "0.65rem 1.75rem", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20, backdropFilter: "blur(16px)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
             <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#fff", fontWeight: 700, flexShrink: 0 }}>
               {session.user?.email?.[0]?.toUpperCase()}
@@ -646,28 +667,18 @@ export default function Home() {
             </div>
           </div>
           {!isPro && (
-            <button onClick={() => setShowUpgrade(true)} style={{
-              padding: "0.42rem 1rem",
-              background: "linear-gradient(135deg, #534AB7, #7F77DD)",
-              color: "#fff", border: "none", borderRadius: "7px",
-              fontSize: "0.78rem", fontWeight: 600, cursor: "pointer",
-              fontFamily: "'DM Sans', sans-serif",
-              boxShadow: "0 2px 14px rgba(83,74,183,0.35)",
-            }}>
+            <button onClick={() => setShowUpgrade(true)} style={{ padding: "0.42rem 1rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "7px", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", boxShadow: "0 2px 14px rgba(83,74,183,0.35)" }}>
               Upgrade ✨
             </button>
           )}
         </div>
 
-        {/* UPGRADE POPUP */}
         {showUpgrade && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 50, display: "flex", alignItems: "center", justifyContent: "center", padding: "1rem" }} onClick={() => setShowUpgrade(false)}>
             <div style={{ background: theme === "dark" ? "#0a0a0a" : "#fff", border: `1px solid ${d.cardBorder}`, borderRadius: "18px", padding: "1.75rem", maxWidth: "360px", width: "100%", boxShadow: "0 24px 64px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
               <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                 <div style={{ width: "44px", height: "44px", borderRadius: "11px", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 0.9rem" }}>
-                  <svg width="18" height="18" viewBox="0 0 100 130" fill="none">
-                    <polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#fff"/>
-                  </svg>
+                  <svg width="18" height="18" viewBox="0 0 100 130" fill="none"><polygon points="0,0 28,0 50,90 72,0 100,0 60,130 40,130" fill="#fff"/></svg>
                 </div>
                 <div style={{ fontSize: "1.3rem", fontWeight: 700, color: d.text, fontFamily: "'Syne', sans-serif", marginBottom: "0.25rem" }}>Veltro Pro</div>
                 <div style={{ fontSize: "0.8rem", color: d.textSub, marginBottom: "1rem" }}>Never miss a client deadline again</div>
@@ -688,11 +699,8 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <a
-                href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8"
-                target="_blank" rel="noopener noreferrer"
-                style={{ display: "block", width: "100%", padding: "0.7rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.35)" }}
-              >
+              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
+                style={{ display: "block", width: "100%", padding: "0.7rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.35)" }}>
                 Upgrade — NZ$29.99/mo
               </a>
               <button onClick={() => setShowUpgrade(false)} style={{ width: "100%", marginTop: "0.6rem", padding: "0.45rem", background: "transparent", border: "none", color: d.textFaint, fontSize: "0.75rem", cursor: "pointer", fontFamily: "'DM Sans', sans-serif" }}>
