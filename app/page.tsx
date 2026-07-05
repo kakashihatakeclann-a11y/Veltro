@@ -40,7 +40,17 @@ export default function Home() {
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
     if (savedTheme) setTheme(savedTheme);
-    localStorage.removeItem("veltro_usage");
+    const savedUsage = localStorage.getItem("veltro_usage");
+    if (savedUsage) {
+      try {
+        const parsed = JSON.parse(savedUsage);
+        if (typeof parsed?.analyzed === "number" && typeof parsed?.tasks === "number") {
+          setUsage(parsed);
+        }
+      } catch {
+        // ignore malformed cache
+      }
+    }
   }, []);
 
   const toggleTheme = (t: "dark" | "light") => {
@@ -71,8 +81,10 @@ export default function Home() {
     setLoading(true);
     setAnalyzing(false);
     setEmails([]);
+    setExpanded(null);
     setFetchError(null);
     setAnalysisProgress(0);
+    let progInterval: ReturnType<typeof setInterval> | null = null;
     try {
       const res = await fetch("/api/gmail");
       if (!res.ok) throw new Error(`Gmail fetch failed: ${res.status}`);
@@ -87,7 +99,7 @@ export default function Home() {
       setAnalyzing(true);
 
       let prog = 0;
-      const progInterval = setInterval(() => {
+      progInterval = setInterval(() => {
         prog = Math.min(prog + Math.random() * 8, 85);
         setAnalysisProgress(prog);
       }, 200);
@@ -98,8 +110,6 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ emails: emailTexts }),
       });
-      clearInterval(progInterval);
-      setAnalysisProgress(100);
       if (!analysisRes.ok) throw new Error(`Analysis failed: ${analysisRes.status}`);
       const analysisData = await analysisRes.json();
       if (analysisData.error) throw new Error(analysisData.error);
@@ -115,9 +125,12 @@ export default function Home() {
     } catch (err: any) {
       console.error(err);
       setFetchError(err?.message || "Something went wrong. Please try again.");
+    } finally {
+      if (progInterval) clearInterval(progInterval);
+      setAnalysisProgress(100);
+      setLoading(false);
+      setAnalyzing(false);
     }
-    setLoading(false);
-    setAnalyzing(false);
   };
 
   const hasLoaded = useRef(false);
@@ -192,6 +205,11 @@ export default function Home() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "4px" }}>
             <strong style={{ fontSize: "0.87rem", fontWeight: 500, color: d.text, lineHeight: 1.35, flex: 1 }}>{decodeHtml(email.subject)}</strong>
             <div style={{ display: "flex", gap: "5px", flexShrink: 0, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+              {email.analysisFailed && (
+                <span style={{ fontSize: "0.63rem", padding: "2px 7px", borderRadius: "4px", fontWeight: 700, letterSpacing: "0.06em", background: "rgba(136,136,136,0.12)", color: "#888" }}>
+                  ANALYSIS UNAVAILABLE
+                </span>
+              )}
               {isAtRisk ? renderRiskBadge(email) : email.category && email.category !== "Other" && (
                 <span style={{
                   fontSize: "0.63rem", padding: "2px 7px", borderRadius: "4px", fontWeight: 700,

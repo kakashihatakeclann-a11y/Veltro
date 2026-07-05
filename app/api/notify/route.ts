@@ -6,7 +6,8 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization")
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
@@ -91,7 +92,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Day 7 — trial expired today
-      if (daysSinceStart === 7) {
+      else if (daysSinceStart === 7) {
         const { error } = await resend.emails.send({
           from: "Veltro <hey@useveltro.app>",
           to: email,
@@ -138,7 +139,7 @@ export async function GET(request: NextRequest) {
       }
 
       // Re-engagement — every 3 days after signup if not pro
-      if (daysSinceStart > 0 && daysSinceStart % 3 === 0 && trialDaysLeft > 0) {
+      else if (daysSinceStart > 0 && daysSinceStart % 3 === 0 && trialDaysLeft > 0) {
         const atRiskCount = data?.lastAtRiskCount || 0
         if (atRiskCount > 0) {
           const { error } = await resend.emails.send({

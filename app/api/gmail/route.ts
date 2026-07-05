@@ -2,10 +2,33 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { NextResponse } from "next/server"
 import { adminDb } from "@/lib/firebaseAdmin"
+
+const GMAIL_FETCH_CONCURRENCY = 10
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex++
+      results[current] = await fn(items[current])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+  }
+  if ((session as any).error === "RefreshAccessTokenError") {
+    return NextResponse.json({ error: "Session expired, please sign in again" }, { status: 401 })
   }
   const accessToken = (session as any).accessToken
   if (!accessToken) {
@@ -51,8 +74,10 @@ export async function GET() {
   }
   const data = await res.json()
   const messageIds = data.messages || []
-  const emails = await Promise.all(
-    messageIds.map(async (msg: any) => {
+  const emails = await mapWithConcurrency(
+    messageIds,
+    GMAIL_FETCH_CONCURRENCY,
+    async (msg: any) => {
       try {
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
@@ -69,7 +94,7 @@ export async function GET() {
       } catch {
         return null
       }
-    })
+    }
   )
   const filteredEmails = emails.filter(Boolean)
   return NextResponse.json({ emails: filteredEmails, isPro: isProOrTrial, trialActive, trialDaysLeft })
