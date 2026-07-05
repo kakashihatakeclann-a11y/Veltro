@@ -3,7 +3,9 @@ import OpenAI from "openai"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { adminDb } from "@/lib/firebaseAdmin"
+import { mapWithConcurrency } from "@/lib/concurrency"
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+const OPENAI_ANALYSIS_CONCURRENCY = 5
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -15,8 +17,10 @@ export async function POST(req: NextRequest) {
     if (!emails || !Array.isArray(emails)) {
       return NextResponse.json({ error: "No emails provided" }, { status: 400 })
     }
-    const results = await Promise.all(
-      emails.map(async (emailText: string) => {
+    const results = await mapWithConcurrency(
+      emails,
+      OPENAI_ANALYSIS_CONCURRENCY,
+      async (emailText: string) => {
         try {
           const completion = await openai.chat.completions.create({
             model: "gpt-4o-mini",
@@ -74,7 +78,7 @@ Return ONLY valid JSON, no other text.`,
             analysisFailed: true,
           }
         }
-      })
+      }
     )
 
     const userEmail = (session as any).user?.email
