@@ -41,14 +41,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No email" }, { status: 400 })
   }
 
-  try {
-    if (eventName === "subscription_created" || eventName === "subscription_resumed") {
-      await adminDb.collection("users").doc(userEmail).set({ isPro: true }, { merge: true })
-    }
+  const GRANT_EVENTS = ["subscription_created", "subscription_resumed", "subscription_unpaused"]
+  const REVOKE_EVENTS = ["subscription_cancelled", "subscription_expired", "subscription_paused"]
+  const STATUS_DRIVEN_EVENTS = ["subscription_updated", "subscription_payment_success", "subscription_payment_failed"]
+  const ACTIVE_STATUSES = ["active", "on_trial"]
 
-    if (eventName === "subscription_cancelled" || eventName === "subscription_expired") {
-      await adminDb.collection("users").doc(userEmail).set({ isPro: false }, { merge: true })
-    }
+  let isPro: boolean | undefined
+  if (GRANT_EVENTS.includes(eventName)) {
+    isPro = true
+  } else if (REVOKE_EVENTS.includes(eventName)) {
+    isPro = false
+  } else if (STATUS_DRIVEN_EVENTS.includes(eventName)) {
+    const status = body.data?.attributes?.status
+    isPro = ACTIVE_STATUSES.includes(status)
+  }
+
+  if (isPro === undefined) {
+    return NextResponse.json({ success: true })
+  }
+
+  try {
+    await adminDb.collection("users").doc(userEmail).set({ isPro }, { merge: true })
   } catch (error: any) {
     console.error("Failed to update user pro status:", error)
     return NextResponse.json({ error: "Failed to update user" }, { status: 500 })

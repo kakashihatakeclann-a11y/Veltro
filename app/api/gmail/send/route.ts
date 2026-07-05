@@ -1,5 +1,5 @@
 import { getServerSession } from "next-auth"
-import { authOptions } from "../../auth/[...nextauth]/route"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
@@ -19,7 +19,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No access token" }, { status: 401 })
   }
 
-  const { to, subject, message, threadId } = await req.json()
+  let body: any
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
+  }
+
+  const { to, subject, message, threadId } = body
+
+  if (typeof to !== "string" || !to.trim() || typeof subject !== "string" || typeof message !== "string") {
+    return NextResponse.json({ error: "to, subject, and message are required" }, { status: 400 })
+  }
+
+  if (/[\r\n]/.test(to) || /[\r\n]/.test(subject)) {
+    return NextResponse.json({ error: "Invalid characters in to or subject" }, { status: 400 })
+  }
 
   const emailLines = [
     `To: ${to}`,
