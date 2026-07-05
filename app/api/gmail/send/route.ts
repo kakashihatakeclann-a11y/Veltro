@@ -9,6 +9,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
 
+  if ((session as any).error === "RefreshAccessTokenError") {
+    return NextResponse.json({ error: "Session expired, please sign in again" }, { status: 401 })
+  }
+
   const accessToken = (session as any).accessToken
 
   if (!accessToken) {
