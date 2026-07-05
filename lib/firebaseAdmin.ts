@@ -1,10 +1,20 @@
 import * as admin from "firebase-admin"
 
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT!)
+function getServiceAccount() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT
+  if (!raw) {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT environment variable is not set")
+  }
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new Error("FIREBASE_SERVICE_ACCOUNT environment variable is not valid JSON")
+  }
+}
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
+    credential: admin.credential.cert(getServiceAccount()),
   })
 }
 

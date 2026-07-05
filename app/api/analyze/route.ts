@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import OpenAI from "openai"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+import { adminDb } from "@/lib/firebaseAdmin"
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 export async function POST(req: NextRequest) {
   try {
+    const session = await getServerSession(authOptions)
+    if (!session) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    }
+
     const { emails } = await req.json()
     if (!emails || !Array.isArray(emails)) {
       return NextResponse.json({ error: "No emails provided" }, { status: 400 })
@@ -51,7 +59,8 @@ Return ONLY valid JSON, no other text.`,
           const content = completion.choices[0].message.content || "{}"
           const cleaned = content.replace(/```json|```/g, "").trim()
           return JSON.parse(cleaned)
-        } catch {
+        } catch (err) {
+          console.error("Failed to analyze email:", err)
           return {
             category: "Other",
             riskLevel: "none",
@@ -62,10 +71,22 @@ Return ONLY valid JSON, no other text.`,
             conversationState: "active",
             followUpUrgency: null,
             followUpReason: null,
+            analysisFailed: true,
           }
         }
       })
     )
+
+    const userEmail = (session as any).user?.email
+    if (userEmail) {
+      const atRiskCount = results.filter((r: any) => r.riskLevel === "high").length
+      try {
+        await adminDb.collection("users").doc(userEmail).set({ lastAtRiskCount: atRiskCount }, { merge: true })
+      } catch (err) {
+        console.error("Failed to persist at-risk count:", err)
+      }
+    }
+
     return NextResponse.json({ results })
   } catch (error: any) {
     return NextResponse.json({ error: error?.message }, { status: 500 })
