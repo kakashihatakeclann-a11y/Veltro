@@ -87,7 +87,14 @@ export default function Home() {
     let progInterval: ReturnType<typeof setInterval> | null = null;
     try {
       const res = await fetch("/api/gmail");
-      if (!res.ok) throw new Error(`Gmail fetch failed: ${res.status}`);
+      if (!res.ok) {
+  let message = `Gmail fetch failed: ${res.status}`;
+  try {
+    const errData = await res.json();
+    if (errData?.error) message = errData.error;
+  } catch {}
+  throw new Error(message);
+}
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       const fetched = data.emails || [];
