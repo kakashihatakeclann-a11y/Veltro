@@ -20,4 +20,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "No user email on session" }, { status: 400 })
   }
   const { from, signal } = await req.json()
-  if (!from || !signal || !["up", "down", "click
+  if (!from || !signal || !["up", "down", "click"].includes(signal)) {
+    return NextResponse.json({ error: "Expected { from, signal: 'up'|'down'|'click' }" }, { status: 400 })
+  }
+  const senderEmail = extractSenderEmail(from)
+  if (!senderEmail) {
+    return NextResponse.json({ error: "Could not parse sender email" }, { status: 400 })
+  }
+  const field = signal === "up" ? "up" : signal === "down" ? "down" : "clicks"
+  try {
+    const ref = adminDb
+      .collection("users").doc(userEmail)
+      .collection("feedback").doc(senderEmail)
+    await ref.set(
+      {
+        [field]: admin.firestore.FieldValue.increment(1),
+        lastSignal: signal,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    )
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error("Failed to record feedback:", err)
+    return NextResponse.json({ error: "Failed to save feedback" }, { status: 500 })
+  }
+}
