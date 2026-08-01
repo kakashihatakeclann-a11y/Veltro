@@ -20,6 +20,35 @@ const decodeHtml = (text: string) => {
     .replace(/&gt;/g, ">");
 };
 
+// "Jane Doe <jane@acme.com>" -> { name: "Jane Doe", email: "jane@acme.com" }
+const parseSender = (from: string) => {
+  if (!from) return { name: "Unknown", email: "" };
+  const match = from.match(/^(.*?)\s*<([^>]+)>$/);
+  if (match) {
+    const name = decodeHtml(match[1].replace(/^"|"$/g, "").trim());
+    return { name: name || match[2], email: match[2].trim() };
+  }
+  return { name: decodeHtml(from), email: from.trim() };
+};
+
+const formatEmailDate = (dateStr: string | null) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = date.toDateString() === yesterday.toDateString();
+  const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (isToday) return time;
+  if (isYesterday) return `Yesterday, ${time}`;
+  const sameYear = date.getFullYear() === now.getFullYear();
+  return date.toLocaleDateString([], { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" }) + `, ${time}`;
+};
+
+const gmailLink = (id: string) => `https://mail.google.com/mail/u/0/#all/${id}`;
+
 export default function Home() {
   const { data: session } = useSession();
   const [emails, setEmails] = useState<any[]>([]);
@@ -36,6 +65,47 @@ export default function Home() {
   const [trialActive, setTrialActive] = useState(false);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
   const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [feedbackGiven, setFeedbackGiven] = useState<Record<string, "up" | "down">>({});
+  const [tagFilter, setTagFilter] = useState<"All" | "Buyer" | "Vendor" | "Seller">("All");
+  const [showTasksPanel, setShowTasksPanel] = useState(false);
+  const [completedTasks, setCompletedTasks] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const saved = localStorage.getItem("veltro_completed_tasks");
+    if (saved) {
+      try { setCompletedTasks(JSON.parse(saved)); } catch { /* ignore malformed cache */ }
+    }
+  }, []);
+
+  const toggleTaskDone = (taskId: string) => {
+    setCompletedTasks(prev => {
+      const next = { ...prev, [taskId]: !prev[taskId] };
+      localStorage.setItem("veltro_completed_tasks", JSON.stringify(next));
+      return next;
+    });
+  };
+
+  const sendFeedback = async (from: string, signal: "up" | "down" | "click") => {
+    try {
+      await fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, signal }),
+      });
+    } catch {
+      // best-effort — feedback loop shouldn't block the UI
+    }
+  };
+
+  const giveFeedback = (email: any, signal: "up" | "down") => {
+    setFeedbackGiven(prev => ({ ...prev, [email.id]: signal }));
+    sendFeedback(email.from, signal);
+  };
+
+  const openInGmail = (email: any) => {
+    sendFeedback(email.from, "click");
+    window.open(gmailLink(email.id), "_blank", "noopener,noreferrer");
+  };
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("veltro_theme") as "dark" | "light" | null;
@@ -148,18 +218,26 @@ export default function Home() {
     }
   }, [session]);
 
+  const presentTags = Array.from(new Set(emails.map(e => e.contactType).filter(t => t && t !== "Other"))) as string[];
+  const visibleEmails = tagFilter === "All" ? emails : emails.filter(e => e.contactType === tagFilter);
+
   const grouped = {
-    "Important":     emails.filter(e => e.category === "Important"),
-    "Action Needed": emails.filter(e => e.category === "Action Needed"),
-    "Other":         emails.filter(e => !e.category || e.category === "Other"),
+    "Important":     visibleEmails.filter(e => e.category === "Important"),
+    "Action Needed": visibleEmails.filter(e => e.category === "Action Needed"),
+    "Other":         visibleEmails.filter(e => !e.category || e.category === "Other"),
   };
 
-  const totalTasks = emails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
-  const allAtRiskEmails = emails.filter(e => e.riskLevel === "high");
+  const totalTasks = visibleEmails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
+  const allAtRiskEmails = visibleEmails.filter(e => e.riskLevel === "high");
   const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
   const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
-  const awaitingCount = emails.filter(e => e.awaitingReply).length;
+  const awaitingCount = visibleEmails.filter(e => e.awaitingReply).length;
   const isWorking = loading || analyzing;
+
+  const allTasks = emails.flatMap((e, ei) =>
+    (e.tasks || []).map((t: string, ti: number) => ({ id: `${e.id || ei}-${ti}`, text: t, subject: e.subject, emailId: e.id }))
+  );
+  const openTasksCount = allTasks.filter(t => !completedTasks[t.id]).length;
 
   const getUrgencyScore = (email: any) => {
     let score = 0;
@@ -227,10 +305,40 @@ export default function Home() {
                   {cat[email.category as keyof typeof cat]?.label}
                 </span>
               )}
+              {email.id && (
+                <button
+                  onClick={e => { e.stopPropagation(); openInGmail(email); }}
+                  title="Open in Gmail"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", padding: 0, border: "none", borderRadius: "4px", background: "transparent", cursor: "pointer", flexShrink: 0 }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={d.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
-          <p style={{ fontSize: "0.73rem", color: d.textSub, marginBottom: "5px", fontFamily: "monospace" }}>{decodeHtml(email.from)}</p>
+          {(() => {
+            const { name, email: senderEmail } = parseSender(email.from);
+            const when = formatEmailDate(email.date);
+            return (
+              <div style={{ display: "flex", alignItems: "baseline", gap: "6px", flexWrap: "wrap", marginBottom: "5px" }}>
+                <span style={{ fontSize: "0.78rem", color: d.text, fontWeight: 500 }}>{name}</span>
+                {senderEmail && senderEmail !== name && (
+                  <span style={{ fontSize: "0.72rem", color: d.textSub, fontFamily: "monospace" }}>{senderEmail}</span>
+                )}
+                {when && (
+                  <span style={{ fontSize: "0.68rem", color: d.textFaint, marginLeft: "auto" }}>{when}</span>
+                )}
+              </div>
+            );
+          })()}
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: email.snippet ? "6px" : 0 }}>
+            {email.contactType && email.contactType !== "Other" && (
+              <span style={{ fontSize: "0.68rem", padding: "1px 7px", borderRadius: "999px", border: `1px solid ${d.cardBorder}`, color: d.textMuted }}>
+                {email.contactType}
+              </span>
+            )}
             {email.deadline && (
               <span style={{ fontSize: "0.72rem", color: "#E24B4A", display: "flex", alignItems: "center", gap: "3px" }}>
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#E24B4A" strokeWidth="2.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -260,6 +368,9 @@ export default function Home() {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ height: "1px", background: isAtRisk ? "rgba(226,75,74,0.1)" : d.divider, marginBottom: "0.8rem" }} />
+            {isAtRisk && email.snippet && (
+              <p style={{ fontSize: "0.8rem", color: d.textMuted, lineHeight: 1.5, marginBottom: "0.8rem" }}>{decodeHtml(email.snippet)}</p>
+            )}
             {email.summary && (
               <div style={{ marginBottom: "0.8rem", padding: "0.65rem 0.85rem", background: theme === "dark" ? "rgba(127,119,221,0.06)" : "rgba(127,119,221,0.05)", borderRadius: "8px", borderLeft: "2px solid rgba(127,119,221,0.3)" }}>
                 <div style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#7F77DD", marginBottom: "5px" }}>AI Summary</div>
@@ -283,6 +394,38 @@ export default function Home() {
                 <span style={{ fontSize: "0.8rem", color: "#E24B4A" }}>Deadline: <strong>{decodeHtml(email.deadline)}</strong></span>
               </div>
             )}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", marginTop: "0.9rem", paddingTop: "0.75rem", borderTop: `1px solid ${isAtRisk ? "rgba(226,75,74,0.1)" : d.divider}` }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span style={{ fontSize: "0.68rem", color: d.textFaint, marginRight: "2px" }}>Was this useful?</span>
+                {(["up", "down"] as const).map(signal => (
+                  <button
+                    key={signal}
+                    onClick={() => giveFeedback(email, signal)}
+                    title={signal === "up" ? "Important to me" : "Not important"}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", width: "24px", height: "24px",
+                      border: `1px solid ${feedbackGiven[email.id] === signal ? (signal === "up" ? "#7F77DD" : "#E24B4A") : d.cardBorder}`,
+                      borderRadius: "6px",
+                      background: feedbackGiven[email.id] === signal ? (signal === "up" ? "rgba(127,119,221,0.12)" : "rgba(226,75,74,0.1)") : "transparent",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={feedbackGiven[email.id] === signal ? (signal === "up" ? "#7F77DD" : "#E24B4A") : d.textFaint} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: signal === "down" ? "rotate(180deg)" : undefined }}>
+                      <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3H14z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/>
+                    </svg>
+                  </button>
+                ))}
+              </div>
+              {email.id && (
+                <button
+                  onClick={() => openInGmail(email)}
+                  style={{ fontSize: "0.75rem", color: "#7F77DD", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, display: "flex", alignItems: "center", gap: "4px" }}
+                >
+                  Open in Gmail
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -478,6 +621,7 @@ export default function Home() {
 
       <div style={{ minHeight: "100vh", background: d.bg, fontFamily: "'DM Sans', sans-serif", color: d.text, transition: "all 0.2s", paddingBottom: "70px" }}>
 
+        <div style={{ position: "sticky", top: 0, zIndex: 10 }}>
         {trialActive && (
           <div style={{ background: "linear-gradient(135deg, #534AB7, #7F77DD)", padding: "0.45rem 2rem", textAlign: "center", fontSize: "0.75rem", color: "rgba(255,255,255,0.9)", letterSpacing: "0.01em" }}>
             🎉 Trial active — <strong>{trialDaysLeft} day{trialDaysLeft !== 1 ? "s" : ""} left</strong> ·{" "}
@@ -489,8 +633,7 @@ export default function Home() {
           borderBottom: `1px solid ${d.navBorder}`,
           padding: "0.8rem 1.75rem",
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          position: "sticky", top: trialActive ? "30px" : 0,
-          background: d.navBg, backdropFilter: "blur(16px)", zIndex: 10,
+          background: d.navBg, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <div style={{ width: "26px", height: "26px", borderRadius: "6px", background: "#534AB7", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -505,6 +648,13 @@ export default function Home() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button onClick={() => setShowTasksPanel(true)} style={{ position: "relative", display: "flex", alignItems: "center", gap: "6px", padding: "0.35rem 0.7rem", border: `1px solid ${d.navBorder}`, borderRadius: "7px", background: "transparent", color: d.textMuted, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: "0.78rem" }}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={d.textMuted} strokeWidth="2" strokeLinecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              Tasks
+              {openTasksCount > 0 && (
+                <span style={{ fontSize: "0.62rem", fontWeight: 700, color: "#fff", background: "#7F77DD", borderRadius: "999px", padding: "1px 6px", minWidth: "16px", textAlign: "center" }}>{openTasksCount}</span>
+              )}
+            </button>
             <div style={{ display: "flex", gap: "3px", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "8px", padding: "3px" }}>
               <button className="theme-btn" onClick={() => toggleTheme("dark")} title="Dark"
                 style={{ width: "26px", height: "26px", borderRadius: "5px", background: theme === "dark" ? "#1a1a2e" : "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
@@ -525,6 +675,7 @@ export default function Home() {
             </button>
           </div>
         </nav>
+        </div>
 
         <div style={{ maxWidth: "680px", margin: "0 auto", padding: "2rem 1.25rem" }}>
           <div style={{ display: "flex", gap: "3px", marginBottom: "1.75rem", background: d.tabBg, border: `1px solid ${d.cardBorder}`, borderRadius: "9px", padding: "3px", width: "fit-content" }}>
@@ -572,6 +723,39 @@ export default function Home() {
 
           {activeTab === "inbox" && (
             <>
+              {emails.length > 0 && !isWorking && (
+                <div style={{ background: "linear-gradient(135deg, rgba(83,74,183,0.08), rgba(127,119,221,0.04))", border: "1px solid rgba(83,74,183,0.2)", borderRadius: "12px", padding: "1rem 1.2rem", marginBottom: "1.5rem" }}>
+                  <div style={{ fontSize: "0.85rem", color: d.text, lineHeight: 1.6 }}>
+                    👋 <strong>It&apos;s {new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.</strong>{" "}
+                    {sortedAtRisk.length > 0
+                      ? <>You&apos;ve got <strong style={{ color: "#E24B4A" }}>{sortedAtRisk.length} at-risk email{sortedAtRisk.length > 1 ? "s" : ""}</strong> that need a reply before they turn into a lost deal.</>
+                      : <>Nothing at risk right now — inbox is under control.</>
+                    }
+                    {totalTasks > 0 && <> There{totalTasks > 1 ? " are " : " is "}<strong style={{ color: "#7F77DD" }}>{totalTasks} open task{totalTasks > 1 ? "s" : ""}</strong> waiting for tomorrow.</>}
+                  </div>
+                </div>
+              )}
+
+              {presentTags.length > 0 && (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginBottom: "1.25rem" }}>
+                  {(["All", ...presentTags] as const).map(tag => (
+                    <button
+                      key={tag}
+                      onClick={() => setTagFilter(tag as any)}
+                      style={{
+                        padding: "0.32rem 0.8rem", borderRadius: "999px", fontSize: "0.74rem", cursor: "pointer",
+                        border: `1px solid ${tagFilter === tag ? "#7F77DD" : d.cardBorder}`,
+                        background: tagFilter === tag ? "rgba(127,119,221,0.12)" : "transparent",
+                        color: tagFilter === tag ? "#7F77DD" : d.textMuted,
+                        fontFamily: "'DM Sans', sans-serif", fontWeight: tagFilter === tag ? 600 : 400,
+                      }}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               {emails.length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px", marginBottom: "1.75rem" }}>
                   {([
@@ -678,11 +862,21 @@ export default function Home() {
           )}
         </div>
 
-        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme === "dark" ? "rgba(6,6,6,0.96)" : "rgba(242,242,240,0.96)", borderTop: `1px solid ${d.navBorder}`, padding: "0.65rem 1.75rem", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20, backdropFilter: "blur(16px)" }}>
+        <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: theme === "dark" ? "rgba(6,6,6,0.96)" : "rgba(242,242,240,0.96)", borderTop: `1px solid ${d.navBorder}`, padding: "0.65rem 1.75rem", display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 20, backdropFilter: "blur(16px)", WebkitBackdropFilter: "blur(16px)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-            <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#fff", fontWeight: 700, flexShrink: 0 }}>
-              {session.user?.email?.[0]?.toUpperCase()}
-            </div>
+            {session.user?.image ? (
+              <img
+                src={session.user.image}
+                alt=""
+                referrerPolicy="no-referrer"
+                style={{ width: "30px", height: "30px", borderRadius: "50%", flexShrink: 0, objectFit: "cover" }}
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <div style={{ width: "30px", height: "30px", borderRadius: "50%", background: "linear-gradient(135deg, #534AB7, #7F77DD)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", color: "#fff", fontWeight: 700, flexShrink: 0 }}>
+                {session.user?.email?.[0]?.toUpperCase()}
+              </div>
+            )}
             <div>
               <div style={{ fontSize: "0.75rem", color: d.text, fontWeight: 500 }}>{session.user?.email}</div>
               <div style={{ fontSize: "0.65rem", color: d.textSub }}>
@@ -733,7 +927,46 @@ export default function Home() {
             </div>
           </div>
         )}
+
+        {showTasksPanel && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 60, display: "flex", justifyContent: "flex-end" }} onClick={() => setShowTasksPanel(false)}>
+            <div
+              style={{ width: "min(360px, 100%)", height: "100%", background: d.cardBg, borderLeft: `1px solid ${d.cardBorder}`, display: "flex", flexDirection: "column", boxShadow: "-12px 0 40px rgba(0,0,0,0.35)" }}
+              onClick={e => e.stopPropagation()}
+            >
+              <div style={{ padding: "1.1rem 1.25rem", borderBottom: `1px solid ${d.divider}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: "1rem", color: d.text }}>Tasks</div>
+                  <div style={{ fontSize: "0.72rem", color: d.textSub }}>{openTasksCount} open · {allTasks.length - openTasksCount} done</div>
+                </div>
+                <button onClick={() => setShowTasksPanel(false)} style={{ background: "transparent", border: "none", cursor: "pointer", color: d.textFaint, fontSize: "1.1rem", lineHeight: 1, padding: "0.25rem" }}>×</button>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "0.75rem 1.1rem" }}>
+                {allTasks.length === 0 && (
+                  <p style={{ fontSize: "0.8rem", color: d.textFaint, textAlign: "center", marginTop: "2rem" }}>No tasks extracted yet.</p>
+                )}
+                {allTasks.map(task => (
+                  <div key={task.id} style={{ display: "flex", alignItems: "flex-start", gap: "10px", padding: "0.6rem 0", borderBottom: `1px solid ${d.divider}` }}>
+                    <input
+                      type="checkbox"
+                      checked={!!completedTasks[task.id]}
+                      onChange={() => toggleTaskDone(task.id)}
+                      style={{ marginTop: "3px", width: "14px", height: "14px", accentColor: "#7F77DD", cursor: "pointer", flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.82rem", color: completedTasks[task.id] ? d.textFaint : d.text, textDecoration: completedTasks[task.id] ? "line-through" : "none", lineHeight: 1.45 }}>
+                        {decodeHtml(task.text)}
+                      </div>
+                      <div style={{ fontSize: "0.68rem", color: d.textFaint, marginTop: "2px" }}>{decodeHtml(task.subject)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
 }
+fix page bugs — sender, dates, gmail link, tasks panel
