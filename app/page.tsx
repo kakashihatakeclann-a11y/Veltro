@@ -969,4 +969,3 @@ export default function Home() {
     </>
   );
 }
-fix page bugs — sender, dates, gmail link, tasks panel
