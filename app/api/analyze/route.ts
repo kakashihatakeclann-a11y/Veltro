@@ -15,12 +15,37 @@ export async function POST(req: NextRequest) {
     if (!emails || !Array.isArray(emails)) {
       return NextResponse.json({ error: "No emails provided" }, { status: 400 })
     }
+
+    const userEmailForPrefs = (session as any).user?.email
+    let preferenceHint = ""
+    if (userEmailForPrefs) {
+      try {
+        const feedbackSnap = await adminDb
+          .collection("users").doc(userEmailForPrefs)
+          .collection("feedback").get()
+        const liked: string[] = []
+        const disliked: string[] = []
+        feedbackSnap.forEach(doc => {
+          const f = doc.data()
+          if ((f.up || 0) > (f.down || 0)) liked.push(doc.id)
+          else if ((f.down || 0) > (f.up || 0)) disliked.push(doc.id)
+        })
+        if (liked.length || disliked.length) {
+          preferenceHint = `\n\nUSER PREFERENCES (learned from past feedback — apply these when scoring category/riskLevel):
+- Senders this user has marked IMPORTANT before, weight higher: ${liked.join(", ") || "none"}
+- Senders this user has marked NOT important before, weight lower (toward "Other"): ${disliked.join(", ") || "none"}`
+        }
+      } catch (err) {
+        console.error("Failed to load feedback preferences:", err)
+      }
+    }
+
     const results = await Promise.all(
       emails.map(async (emailText: string) => {
         try {
           const completion = await openai.chat.completions.create({
             model: "gpt-4o-mini",
-            max_tokens: 300,
+            max_tokens: 500,
             messages: [
               {
                 role: "system",
@@ -28,12 +53,13 @@ export async function POST(req: NextRequest) {
 - category: "Important" | "Action Needed" | "Other"
 - riskLevel: "high" | "medium" | "none"
 - deadline: string or null (e.g. "June 10" or null)
-- summary: string (1-2 sentences max)
+- summary: string, 3-5 sentences. Cover: what the sender wants, the key specifics they mentioned (budget, timeline, property/deal details, numbers), the current state of the conversation, and what's at stake if this is ignored. Write it so the user never has to open the original email to know what's going on.
 - tasks: array of strings (action items, empty array if none)
 - awaitingReply: boolean (true if this thread needs a reply)
 - conversationState: "active" | "waiting_on_them" | "waiting_on_you" | "stalled" | "ghosted"
 - followUpUrgency: "high" | "medium" | "low" | null
 - followUpReason: string or null (e.g. "client silent 5 days" or null)
+- contactType: "Buyer" | "Vendor" | "Seller" | "Other" (best guess at the sender's role in this business relationship, based on the email content)
 
 SENDER CHECK (do this first):
 - If sender contains "no-reply", "noreply", "donotreply", "notifications@", or is a known automated/corporate sender (banks, utilities, payment processors, government services like AT Park, Afterpay, IRD): category = "Other", riskLevel = "none". Stop here, do not analyze content further.
@@ -46,7 +72,7 @@ CONTENT ANALYSIS (for real people only):
 - Medium risk: genuine inquiry without explicit urgency signals but clear buying/working intent.
 - A detailed inquiry with budget and move-in/start date should NEVER be "Other" — it's at minimum "Important" with medium-high risk, since ignoring it could mean losing the client to a competitor.
 - conversationState "ghosted" = no reply expected for 3+ days on important thread
-- followUpUrgency "high" = money or client relationship at risk
+- followUpUrgency "high" = money or client relationship at risk${preferenceHint}
 
 Return ONLY valid JSON, no other text.`,
               },
@@ -71,6 +97,7 @@ Return ONLY valid JSON, no other text.`,
             conversationState: "active",
             followUpUrgency: null,
             followUpReason: null,
+            contactType: "Other",
             analysisFailed: true,
           }
         }
