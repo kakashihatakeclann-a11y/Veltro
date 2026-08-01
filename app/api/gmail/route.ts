@@ -79,7 +79,7 @@ export async function GET() {
   let res: Response
   try {
     res = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=${maxResults}&labelIds=INBOX`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
   } catch (err) {
