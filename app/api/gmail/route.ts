@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { adminDb } from "@/lib/firebaseAdmin"
 
 const GMAIL_FETCH_CONCURRENCY = 10
+const MAX_BODY_CHARS = 3000
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -22,6 +23,35 @@ async function mapWithConcurrency<T, R>(
   return results
 }
 
+function decodeBase64Url(data: string): string {
+  return Buffer.from(data, "base64").toString("utf8")
+}
+
+// Walks a Gmail message payload (which can be arbitrarily nested multipart/*)
+// and pulls out the best plain-text representation it can find.
+function extractPlainTextBody(payload: any): string {
+  if (!payload) return ""
+  if (payload.mimeType === "text/plain" && payload.body?.data) {
+    return decodeBase64Url(payload.body.data)
+  }
+  if (payload.parts) {
+    const plainPart = payload.parts.find((p: any) => p.mimeType === "text/plain")
+    if (plainPart?.body?.data) return decodeBase64Url(plainPart.body.data)
+    for (const part of payload.parts) {
+      const nested = extractPlainTextBody(part)
+      if (nested) return nested
+    }
+    const htmlPart = payload.parts.find((p: any) => p.mimeType === "text/html")
+    if (htmlPart?.body?.data) {
+      return decodeBase64Url(htmlPart.body.data).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+    }
+  }
+  if (payload.mimeType === "text/html" && payload.body?.data) {
+    return decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+  }
+  return ""
+}
+
 export async function GET() {
   const session = await getServerSession(authOptions)
   if (!session) {
@@ -37,14 +67,14 @@ export async function GET() {
     return NextResponse.json({ error: "No access token" }, { status: 401 })
   }
 
-  const email = (session as any).user?.email
+  const userEmail: string | undefined = (session as any).user?.email
   let isPro = false
   let trialActive = false
   let trialDaysLeft = 0
 
-  if (email) {
+  if (userEmail) {
     try {
-      const userRef = adminDb.collection("users").doc(email)
+      const userRef = adminDb.collection("users").doc(userEmail)
       const userDoc = await userRef.get()
       if (!userDoc.exists) {
         await userRef.set({
@@ -104,20 +134,61 @@ export async function GET() {
   }
 
   const data = await res.json()
-  const messageIds = data.messages || []
+  const messageIds: { id: string; threadId: string }[] = data.messages || []
+
+  // Gmail's messages.list returns newest-first, so the first message we see
+  // for a given thread is the most recent INBOX-labeled one in it. Threads
+  // often have several old inbound messages still tagged INBOX even after
+  // the user replied — collapsing to one row per thread avoids showing the
+  // same conversation multiple times.
+  const seenThreads = new Set<string>()
+  const dedupedMessages = messageIds.filter((m) => {
+    if (!m.threadId) return true
+    if (seenThreads.has(m.threadId)) return false
+    seenThreads.add(m.threadId)
+    return true
+  })
 
   const emails = await mapWithConcurrency(
-    messageIds,
+    dedupedMessages,
     GMAIL_FETCH_CONCURRENCY,
-    async (msg: any) => {
+    async (msg) => {
       try {
+        // The INBOX label sticks to individual messages, not the thread as a
+        // whole — a thread the user already replied to can still surface an
+        // old inbound message here. Check who actually sent the LAST message
+        // in the thread (across all labels) before treating this as pending.
+        const threadRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${msg.threadId}?format=metadata&metadataHeaders=From&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        )
+        if (!threadRes.ok) {
+          console.error("GMAIL_THREAD_FETCH_FAILED", msg.threadId, threadRes.status)
+          return null
+        }
+        const threadData = await threadRes.json()
+        const threadMessages: any[] = threadData.messages || []
+        if (threadMessages.length === 0) return null
+
+        const lastMessage = threadMessages[threadMessages.length - 1]
+        const lastFrom: string = lastMessage.payload?.headers?.find((h: any) => h.name === "From")?.value || ""
+        const userSpokeLast = !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
+        if (userSpokeLast) {
+          // The user already has the last word in this thread — nothing pending.
+          return null
+        }
+
+        // Fetch the full content of the message that's actually awaiting a
+        // reply (usually msg.id, but if a newer inbound message landed after
+        // the list call, prefer the thread's true latest message).
+        const targetId = lastMessage.id || msg.id
         const msgRes = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${targetId}?format=full`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
         )
         if (!msgRes.ok) {
           const errBody = await msgRes.text()
-          console.error("GMAIL_MESSAGE_FETCH_FAILED", msg.id, msgRes.status, errBody)
+          console.error("GMAIL_MESSAGE_FETCH_FAILED", targetId, msgRes.status, errBody)
           return null
         }
         const msgData = await msgRes.json()
@@ -126,7 +197,9 @@ export async function GET() {
         const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
         const date = headers.find((h: any) => h.name === "Date")?.value || null
         const snippet = msgData.snippet || ""
-        return { id: msg.id, subject, from, snippet, date, awaitingReply: false }
+        const body = extractPlainTextBody(msgData.payload).slice(0, MAX_BODY_CHARS)
+
+        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: true }
       } catch (err) {
         console.error("GMAIL_MESSAGE_FETCH_ERROR", msg.id, err)
         return null

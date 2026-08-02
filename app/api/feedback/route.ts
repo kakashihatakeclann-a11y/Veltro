@@ -15,19 +15,24 @@ export async function POST(req: NextRequest) {
   if (!session) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
   }
+
   const userEmail = (session as any).user?.email
   if (!userEmail) {
     return NextResponse.json({ error: "No user email on session" }, { status: 400 })
   }
+
   const { from, signal } = await req.json()
   if (!from || !signal || !["up", "down", "click"].includes(signal)) {
     return NextResponse.json({ error: "Expected { from, signal: 'up'|'down'|'click' }" }, { status: 400 })
   }
+
   const senderEmail = extractSenderEmail(from)
   if (!senderEmail) {
     return NextResponse.json({ error: "Could not parse sender email" }, { status: 400 })
   }
+
   const field = signal === "up" ? "up" : signal === "down" ? "down" : "clicks"
+
   try {
     const ref = adminDb
       .collection("users").doc(userEmail)

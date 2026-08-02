@@ -47,7 +47,8 @@ const formatEmailDate = (dateStr: string | null) => {
   return date.toLocaleDateString([], { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" }) + `, ${time}`;
 };
 
-const gmailLink = (id: string) => `https://mail.google.com/mail/u/0/#all/${id}`;
+// Opens a ready-to-type Gmail compose window with the recipient already filled in.
+const gmailReplyLink = (senderEmail: string) => `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(senderEmail)}`;
 
 export default function Home() {
   const { data: session } = useSession();
@@ -102,9 +103,10 @@ export default function Home() {
     sendFeedback(email.from, signal);
   };
 
-  const openInGmail = (email: any) => {
+  const replyInGmail = (email: any) => {
     sendFeedback(email.from, "click");
-    window.open(gmailLink(email.id), "_blank", "noopener,noreferrer");
+    const { email: senderEmail } = parseSender(email.from);
+    window.open(gmailReplyLink(senderEmail), "_blank", "noopener,noreferrer");
   };
 
   useEffect(() => {
@@ -181,7 +183,19 @@ export default function Home() {
         setAnalysisProgress(prog);
       }, 200);
 
-      const emailTexts = fetched.map((email: any) => `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`);
+      const emailTexts = fetched.map((email: any) => {
+        const received = email.date ? new Date(email.date) : null;
+        const validDate = received && !isNaN(received.getTime());
+        const hoursAgo = validDate ? Math.floor((Date.now() - received.getTime()) / 3600000) : null;
+        const receivedLine = hoursAgo === null
+          ? ""
+          : hoursAgo < 1
+            ? "Received: just now. The user has not replied yet.\n"
+            : hoursAgo < 48
+              ? `Received: ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago. The user has not replied yet.\n`
+              : `Received: ${Math.floor(hoursAgo / 24)} day${Math.floor(hoursAgo / 24) === 1 ? "" : "s"} ago. The user has not replied yet.\n`;
+        return `Subject: ${email.subject}\nFrom: ${email.from}\n${receivedLine}\n${email.body || email.snippet}`;
+      });
       const analysisRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -250,7 +264,18 @@ export default function Home() {
 
   const sortedAtRisk = [...atRiskEmails].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
 
+  const elapsedLabel = (email: any) => {
+    if (!email.date) return null;
+    const received = new Date(email.date);
+    if (isNaN(received.getTime())) return null;
+    const hours = Math.floor((Date.now() - received.getTime()) / 3600000);
+    if (hours < 1) return "JUST NOW";
+    if (hours < 24) return `${hours}H`;
+    return `${Math.floor(hours / 24)}D`;
+  };
+
   const renderRiskBadge = (email: any) => {
+    const elapsed = elapsedLabel(email);
     if (email.deadline && email.awaitingReply) return (
       <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.2)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE + NO REPLY</span>
     );
@@ -258,7 +283,7 @@ export default function Home() {
       <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE</span>
     );
     if (email.awaitingReply) return (
-      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,159,39,0.15)", color: "#EF9F27", fontWeight: 700, letterSpacing: "0.05em" }}>NO REPLY 48H</span>
+      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,159,39,0.15)", color: "#EF9F27", fontWeight: 700, letterSpacing: "0.05em" }}>NO REPLY{elapsed ? ` · ${elapsed}` : ""}</span>
     );
     return <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.12)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>HIGH RISK</span>;
   };
@@ -307,12 +332,12 @@ export default function Home() {
               )}
               {email.id && (
                 <button
-                  onClick={e => { e.stopPropagation(); openInGmail(email); }}
-                  title="Open in Gmail"
+                  onClick={e => { e.stopPropagation(); replyInGmail(email); }}
+                  title="Reply in Gmail"
                   style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", padding: 0, border: "none", borderRadius: "4px", background: "transparent", cursor: "pointer", flexShrink: 0 }}
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={d.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
                   </svg>
                 </button>
               )}
@@ -418,11 +443,11 @@ export default function Home() {
               </div>
               {email.id && (
                 <button
-                  onClick={() => openInGmail(email)}
+                  onClick={() => replyInGmail(email)}
                   style={{ fontSize: "0.75rem", color: "#7F77DD", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, display: "flex", alignItems: "center", gap: "4px" }}
                 >
-                  Open in Gmail
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                  Reply in Gmail
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
                 </button>
               )}
             </div>
@@ -604,6 +629,13 @@ export default function Home() {
       </>
     );
   }
+
+  // Ties the checkout to the signed-in account: prefills the email (convenience)
+  // and passes it as custom data, which LemonSqueezy echoes back on the webhook
+  // regardless of what the customer types/edits in the checkout email field —
+  // otherwise a mismatched checkout email leaves a paying customer stuck on Free.
+  const accountEmail = session.user?.email || "";
+  const checkoutUrl = `https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8?checkout[email]=${encodeURIComponent(accountEmail)}&checkout[custom][user_email]=${encodeURIComponent(accountEmail)}`;
 
   /* ─── APP ─── */
   return (
@@ -917,7 +949,7 @@ export default function Home() {
                   </div>
                 ))}
               </div>
-              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
+              <a href={checkoutUrl} target="_blank" rel="noopener noreferrer"
                 style={{ display: "block", width: "100%", padding: "0.7rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.35)" }}>
                 Upgrade — NZ$29.99/mo
               </a>

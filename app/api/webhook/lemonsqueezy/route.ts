@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
   }
 
   const eventName = body.meta?.event_name
-  const userEmail = body.data?.attributes?.user_email
+  // custom_data carries the email of the Veltro account that started checkout —
+  // set by the app itself, so it can't drift from what the customer types/edits
+  // into LemonSqueezy's checkout email field. Fall back to the checkout email
+  // for older links or purchases made outside the app's own checkout flow.
+  const userEmail: string | undefined =
+    body.meta?.custom_data?.user_email || body.data?.attributes?.user_email
 
   if (!userEmail) {
     return NextResponse.json({ error: "No email" }, { status: 400 })

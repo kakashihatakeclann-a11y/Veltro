@@ -4,6 +4,26 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/app/api/auth/[...nextauth]/route"
 import { adminDb } from "@/lib/firebaseAdmin"
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+const ANALYZE_CONCURRENCY = 8
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length)
+  let nextIndex = 0
+  async function worker() {
+    while (nextIndex < items.length) {
+      const current = nextIndex++
+      results[current] = await fn(items[current])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return results
+}
+
 export async function POST(req: NextRequest) {
   try {
     const session = await getServerSession(authOptions)
@@ -40,8 +60,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const results = await Promise.all(
-      emails.map(async (emailText: string) => {
+    const results = await mapWithConcurrency(
+      emails,
+      ANALYZE_CONCURRENCY,
+      async (emailText: string) => {
         try {
           const completion = await openai.chat.completions.create({
             model: "gpt-4o-mini",
@@ -49,13 +71,12 @@ export async function POST(req: NextRequest) {
             messages: [
               {
                 role: "system",
-                content: `You are an email analyzer for busy professionals managing client communications. Analyze the email and return ONLY a JSON object with these fields:
+                content: `You are an email analyzer for busy professionals managing client communications. Each email includes how long ago it was received and confirmation that the user has not replied yet (that part is already known — don't re-derive it). Analyze the email and return ONLY a JSON object with these fields:
 - category: "Important" | "Action Needed" | "Other"
 - riskLevel: "high" | "medium" | "none"
 - deadline: string or null (e.g. "June 10" or null)
 - summary: string, 3-5 sentences. Cover: what the sender wants, the key specifics they mentioned (budget, timeline, property/deal details, numbers), the current state of the conversation, and what's at stake if this is ignored. Write it so the user never has to open the original email to know what's going on.
 - tasks: array of strings (action items, empty array if none)
-- awaitingReply: boolean (true if this thread needs a reply)
 - conversationState: "active" | "waiting_on_them" | "waiting_on_you" | "stalled" | "ghosted"
 - followUpUrgency: "high" | "medium" | "low" | null
 - followUpReason: string or null (e.g. "client silent 5 days" or null)
@@ -68,7 +89,7 @@ SENDER CHECK (do this first):
 CONTENT ANALYSIS (for real people only):
 - Important: the sender is expressing genuine interest, intent, or a request — especially with specifics like budget, timeline, requirements, or a decision they're close to making. A new inquiry with clear buying intent IS Important even with no explicit deadline mentioned.
 - Action Needed: the email requires a reply, quote, information, or next step from the user.
-- High risk: any of — explicit deadline within 7 days, sender indicates they're deciding soon or comparing options, payment/contract related, no reply sent in 48h+ on an active thread, OR a new high-intent inquiry (clear budget + timeline) that hasn't been responded to yet.
+- High risk: any of — explicit deadline within 7 days, sender indicates they're deciding soon or comparing options, payment/contract related, received 48h+ ago with still no reply from the user, OR a new high-intent inquiry (clear budget + timeline) that hasn't been responded to yet.
 - Medium risk: genuine inquiry without explicit urgency signals but clear buying/working intent.
 - A detailed inquiry with budget and move-in/start date should NEVER be "Other" — it's at minimum "Important" with medium-high risk, since ignoring it could mean losing the client to a competitor.
 - conversationState "ghosted" = no reply expected for 3+ days on important thread
@@ -93,7 +114,6 @@ Return ONLY valid JSON, no other text.`,
             deadline: null,
             summary: "",
             tasks: [],
-            awaitingReply: false,
             conversationState: "active",
             followUpUrgency: null,
             followUpReason: null,
@@ -101,7 +121,7 @@ Return ONLY valid JSON, no other text.`,
             analysisFailed: true,
           }
         }
-      })
+      }
     )
 
     const userEmail = (session as any).user?.email

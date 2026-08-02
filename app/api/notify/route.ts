@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Resend } from "resend"
+import crypto from "crypto"
 import { adminDb } from "@/lib/firebaseAdmin"
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
+function isAuthorizedCronRequest(request: NextRequest, cronSecret: string | undefined): boolean {
+  if (!cronSecret) return false
+  const authHeader = request.headers.get("authorization") || ""
+  const expected = `Bearer ${cronSecret}`
+  const authBuffer = Buffer.from(authHeader, "utf8")
+  const expectedBuffer = Buffer.from(expected, "utf8")
+  return authBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(authBuffer, expectedBuffer)
+}
+
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get("authorization")
-  const cronSecret = process.env.CRON_SECRET
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorizedCronRequest(request, process.env.CRON_SECRET)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
