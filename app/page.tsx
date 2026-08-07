@@ -235,14 +235,18 @@ export default function Home() {
   const presentTags = Array.from(new Set(emails.map(e => e.contactType).filter(t => t && t !== "Other"))) as string[];
   const visibleEmails = tagFilter === "All" ? emails : emails.filter(e => e.contactType === tagFilter);
 
+  // Gone-quiet threads get their own section, so keep them out of the triage
+  // lists below — otherwise the same client shows up twice.
+  const inboxEmails = visibleEmails.filter(e => !e.goneQuiet);
+
   const grouped = {
-    "Important":     visibleEmails.filter(e => e.category === "Important"),
-    "Action Needed": visibleEmails.filter(e => e.category === "Action Needed"),
-    "Other":         visibleEmails.filter(e => !e.category || e.category === "Other"),
+    "Important":     inboxEmails.filter(e => e.category === "Important"),
+    "Action Needed": inboxEmails.filter(e => e.category === "Action Needed"),
+    "Other":         inboxEmails.filter(e => !e.category || e.category === "Other"),
   };
 
   const totalTasks = visibleEmails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
-  const allAtRiskEmails = visibleEmails.filter(e => e.riskLevel === "high");
+  const allAtRiskEmails = inboxEmails.filter(e => e.riskLevel === "high");
   const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
   const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
   const awaitingCount = visibleEmails.filter(e => e.awaitingReply).length;
@@ -263,6 +267,14 @@ export default function Home() {
   };
 
   const sortedAtRisk = [...atRiskEmails].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
+
+  // Clients who went quiet after the user replied. Nothing arrives to remind
+  // you about these, so they're the ones that quietly cost deals. "Other" means
+  // the analyzer judged the thread finished or automated — those would bury the
+  // ones that matter.
+  const goneQuietEmails = visibleEmails
+    .filter(e => e.goneQuiet && e.category && e.category !== "Other")
+    .sort((a, b) => (b.daysSilent || 0) - (a.daysSilent || 0));
 
   const elapsedLabel = (email: any) => {
     if (!email.date) return null;
@@ -853,6 +865,24 @@ export default function Home() {
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={d.emptyIcon} strokeWidth="1.5"><path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                   </div>
                   <p style={{ fontSize: "0.85rem", color: d.textFaint }}>No emails loaded yet</p>
+                </div>
+              )}
+
+              {goneQuietEmails.length > 0 && (
+                <div style={{ marginBottom: "2rem" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#E24B4A", animation: "pulse-dot 2s ease infinite" }} />
+                    <span style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#E24B4A" }}>Gone Quiet</span>
+                    <span style={{ fontSize: "0.67rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>{goneQuietEmails.length}</span>
+                  </div>
+                  {goneQuietEmails.map((email, i) => (
+                    <div key={`gq-${i}`} style={{ marginBottom: "6px" }}>
+                      <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "#E24B4A", letterSpacing: "0.06em", marginBottom: "2px" }}>
+                        SILENT {email.daysSilent} DAY{email.daysSilent === 1 ? "" : "S"}
+                      </div>
+                      {renderEmailCard(email, i, true)}
+                    </div>
+                  ))}
                 </div>
               )}
 

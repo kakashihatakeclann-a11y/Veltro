@@ -173,15 +173,22 @@ export async function GET() {
         const lastMessage = threadMessages[threadMessages.length - 1]
         const lastFrom: string = lastMessage.payload?.headers?.find((h: any) => h.name === "From")?.value || ""
         const userSpokeLast = !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
+        // The user had the last word: the contact has gone quiet. Nothing will
+        // ever arrive to remind them about these, which is why they get missed.
+        let daysSilent = 0
         if (userSpokeLast) {
-          // The user already has the last word in this thread — nothing pending.
-          return null
+          const repliedAt = new Date(lastMessage.payload?.headers?.find((h: any) => h.name === "Date")?.value || "")
+          if (isNaN(repliedAt.getTime())) return null
+          daysSilent = Math.floor((Date.now() - repliedAt.getTime()) / 86400000)
+          if (daysSilent < 3 || daysSilent > 90) return null
         }
 
         // Fetch the full content of the message that's actually awaiting a
         // reply (usually msg.id, but if a newer inbound message landed after
         // the list call, prefer the thread's true latest message).
-        const targetId = lastMessage.id || msg.id
+        // For a gone-quiet thread the last message is the user's own reply, so
+        // load the inbound one instead — that's what the contact actually wanted.
+        const targetId = userSpokeLast ? msg.id : (lastMessage.id || msg.id)
         const msgRes = await fetch(
           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${targetId}?format=full`,
           { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -199,7 +206,7 @@ export async function GET() {
         const snippet = msgData.snippet || ""
         const body = extractPlainTextBody(msgData.payload).slice(0, MAX_BODY_CHARS)
 
-        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: true }
+        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: !userSpokeLast, goneQuiet: userSpokeLast, daysSilent }
       } catch (err) {
         console.error("GMAIL_MESSAGE_FETCH_ERROR", msg.id, err)
         return null
