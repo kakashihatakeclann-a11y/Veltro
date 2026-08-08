@@ -180,7 +180,7 @@ export async function GET() {
           const repliedAt = new Date(lastMessage.payload?.headers?.find((h: any) => h.name === "Date")?.value || "")
           if (isNaN(repliedAt.getTime())) return null
           daysSilent = Math.floor((Date.now() - repliedAt.getTime()) / 86400000)
-          if (daysSilent < 3 || daysSilent > 90) return null
+          if (daysSilent > 90) return null
         }
 
         // Fetch the full content of the message that's actually awaiting a
