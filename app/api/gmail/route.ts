@@ -171,8 +171,17 @@ export async function GET() {
         if (threadMessages.length === 0) return null
 
         const lastMessage = threadMessages[threadMessages.length - 1]
+        // Whether the user has replied is decided by Gmail's own SENT label, not
+        // by matching the From header against their account address. Agents
+        // routinely send from an alias — Google account paulette@gmail.com,
+        // sending as paulette@agency.co.nz — and the header match failed on
+        // every one of those, so threads they had already answered kept coming
+        // back as unanswered. Header matching stays only as a fallback for the
+        // rare case Gmail returns no labels.
         const lastFrom: string = lastMessage.payload?.headers?.find((h: any) => h.name === "From")?.value || ""
-        const userSpokeLast = !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
+        const userSpokeLast = Array.isArray(lastMessage.labelIds)
+          ? lastMessage.labelIds.includes("SENT")
+          : !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
         // The user had the last word: the contact has gone quiet. Nothing will
         // ever arrive to remind them about these, which is why they get missed.
         let daysSilent = 0

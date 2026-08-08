@@ -1,0 +1,618 @@
+From 2ab73c6f3b919f9002d349708c5e051aa11e3316 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Sun, 2 Aug 2026 00:33:02 +0000
+Subject: [PATCH] Veltro fixes: real email bodies, reply-state detection, Gmail
+ reply link, Pro checkout fix
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+Rebased onto current main (which already carries the earlier UI changes).
+Everything here is on top of that.
+Data correctness:
+- gmail/route.ts: dedupe by thread, then check who sent the thread's true
+  latest message. If the user already replied, the thread is excluded — it's
+  handled. Fetch full message bodies (format=full) instead of metadata-only
+  and extract plain text from nested multipart payloads, so the AI reads the
+  actual email rather than a ~200-char snippet. awaitingReply is now a
+  deterministic fact, not an LLM guess.
+- analyze/route.ts: cap concurrent OpenAI calls (was unbounded Promise.all,
+  up to 100 simultaneous requests on a Pro inbox); risk scoring grounded in
+  real elapsed time; awaitingReply no longer inferred.
+- page.tsx: feed the AI full body + real "received N hours/days ago"; the
+  NO REPLY badge shows actual elapsed time instead of a hardcoded "48H".
+Trust / scope:
+- OAuth scope reduced to gmail.readonly. The app requested gmail.send and
+  gmail.modify but never used them, while the landing page, warning modal
+  and privacy policy all promise read-only access. Removed the unreachable
+  /api/gmail/send endpoint and unused lib/firebase.ts.
+Reply flow:
+- The Gmail link opened the thread view, so users still had to find the
+  sender and hit Reply. Both entry points now open Gmail's compose deep
+  link with the recipient prefilled.
+Billing:
+- The Upgrade button linked to a static checkout with no tie to the
+  signed-in account, and the webhook trusted whatever email the customer
+  typed. A customer paying with a different email than they signed in with
+  would never get Pro unlocked. Checkout now carries the account email as
+  custom_data and the webhook reads that first.
+Hardening:
+- notify/route.ts: cron secret now compared with crypto.timingSafeEqual.
+- track/route.ts: public tracking endpoint now allowlists event types and
+  validates/caps the payload.
+Co-Authored-By: Claude <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_011wV8r9VSvRXNKCShe7Vx71
+---
+ app/api/analyze/route.ts              | 34 +++++++---
+ app/api/auth/[...nextauth]/route.ts   |  2 +-
+ app/api/feedback/route.ts             |  5 ++
+ app/api/gmail/route.ts                | 91 ++++++++++++++++++++++++---
+ app/api/gmail/send/route.ts           | 57 -----------------
+ app/api/notify/route.ts               | 14 ++++-
+ app/api/webhook/lemonsqueezy/route.ts |  7 ++-
+ app/page.tsx                          | 56 +++++++++++++----
+ app/track/route.ts                    | 10 ++-
+ lib/firebase.ts                       | 14 -----
+ 10 files changed, 184 insertions(+), 106 deletions(-)
+ delete mode 100644 app/api/gmail/send/route.ts
+ delete mode 100644 lib/firebase.ts
+diff --git a/app/api/analyze/route.ts b/app/api/analyze/route.ts
+index b84b5a3..0225ca4 100644
+--- a/app/api/analyze/route.ts
++++ b/app/api/analyze/route.ts
+@@ -4,6 +4,26 @@ import { getServerSession } from "next-auth"
+ import { authOptions } from "@/app/api/auth/[...nextauth]/route"
+ import { adminDb } from "@/lib/firebaseAdmin"
+ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
++
++const ANALYZE_CONCURRENCY = 8
++
++async function mapWithConcurrency<T, R>(
++  items: T[],
++  limit: number,
++  fn: (item: T) => Promise<R>
++): Promise<R[]> {
++  const results: R[] = new Array(items.length)
++  let nextIndex = 0
++  async function worker() {
++    while (nextIndex < items.length) {
++      const current = nextIndex++
++      results[current] = await fn(items[current])
++    }
++  }
++  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
++  return results
++}
++
+ export async function POST(req: NextRequest) {
+   try {
+     const session = await getServerSession(authOptions)
+@@ -40,8 +60,10 @@ export async function POST(req: NextRequest) {
+       }
+     }
+ 
+-    const results = await Promise.all(
+-      emails.map(async (emailText: string) => {
++    const results = await mapWithConcurrency(
++      emails,
++      ANALYZE_CONCURRENCY,
++      async (emailText: string) => {
+         try {
+           const completion = await openai.chat.completions.create({
+             model: "gpt-4o-mini",
+@@ -49,13 +71,12 @@ export async function POST(req: NextRequest) {
+             messages: [
+               {
+                 role: "system",
+-                content: `You are an email analyzer for busy professionals managing client communications. Analyze the email and return ONLY a JSON object with these fields:
++                content: `You are an email analyzer for busy professionals managing client communications. Each email includes how long ago it was received and confirmation that the user has not replied yet (that part is already known — don't re-derive it). Analyze the email and return ONLY a JSON object with these fields:
+ - category: "Important" | "Action Needed" | "Other"
+ - riskLevel: "high" | "medium" | "none"
+ - deadline: string or null (e.g. "June 10" or null)
+ - summary: string, 3-5 sentences. Cover: what the sender wants, the key specifics they mentioned (budget, timeline, property/deal details, numbers), the current state of the conversation, and what's at stake if this is ignored. Write it so the user never has to open the original email to know what's going on.
+ - tasks: array of strings (action items, empty array if none)
+-- awaitingReply: boolean (true if this thread needs a reply)
+ - conversationState: "active" | "waiting_on_them" | "waiting_on_you" | "stalled" | "ghosted"
+ - followUpUrgency: "high" | "medium" | "low" | null
+ - followUpReason: string or null (e.g. "client silent 5 days" or null)
+@@ -68,7 +89,7 @@ SENDER CHECK (do this first):
+ CONTENT ANALYSIS (for real people only):
+ - Important: the sender is expressing genuine interest, intent, or a request — especially with specifics like budget, timeline, requirements, or a decision they're close to making. A new inquiry with clear buying intent IS Important even with no explicit deadline mentioned.
+ - Action Needed: the email requires a reply, quote, information, or next step from the user.
+-- High risk: any of — explicit deadline within 7 days, sender indicates they're deciding soon or comparing options, payment/contract related, no reply sent in 48h+ on an active thread, OR a new high-intent inquiry (clear budget + timeline) that hasn't been responded to yet.
++- High risk: any of — explicit deadline within 7 days, sender indicates they're deciding soon or comparing options, payment/contract related, received 48h+ ago with still no reply from the user, OR a new high-intent inquiry (clear budget + timeline) that hasn't been responded to yet.
+ - Medium risk: genuine inquiry without explicit urgency signals but clear buying/working intent.
+ - A detailed inquiry with budget and move-in/start date should NEVER be "Other" — it's at minimum "Important" with medium-high risk, since ignoring it could mean losing the client to a competitor.
+ - conversationState "ghosted" = no reply expected for 3+ days on important thread
+@@ -93,7 +114,6 @@ Return ONLY valid JSON, no other text.`,
+             deadline: null,
+             summary: "",
+             tasks: [],
+-            awaitingReply: false,
+             conversationState: "active",
+             followUpUrgency: null,
+             followUpReason: null,
+@@ -101,7 +121,7 @@ Return ONLY valid JSON, no other text.`,
+             analysisFailed: true,
+           }
+         }
+-      })
++      }
+     )
+ 
+     const userEmail = (session as any).user?.email
+diff --git a/app/api/auth/[...nextauth]/route.ts b/app/api/auth/[...nextauth]/route.ts
+index f1842a6..d719366 100644
+--- a/app/api/auth/[...nextauth]/route.ts
++++ b/app/api/auth/[...nextauth]/route.ts
+@@ -39,7 +39,7 @@ export const authOptions = {
+       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+       authorization: {
+         params: {
+-          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.modify",
++          scope: "openid email profile https://www.googleapis.com/auth/gmail.readonly",
+           access_type: "offline",
+           prompt: "consent",
+         },
+diff --git a/app/api/feedback/route.ts b/app/api/feedback/route.ts
+index 21bc255..157ea2c 100644
+--- a/app/api/feedback/route.ts
++++ b/app/api/feedback/route.ts
+@@ -15,19 +15,24 @@ export async function POST(req: NextRequest) {
+   if (!session) {
+     return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+   }
++
+   const userEmail = (session as any).user?.email
+   if (!userEmail) {
+     return NextResponse.json({ error: "No user email on session" }, { status: 400 })
+   }
++
+   const { from, signal } = await req.json()
+   if (!from || !signal || !["up", "down", "click"].includes(signal)) {
+     return NextResponse.json({ error: "Expected { from, signal: 'up'|'down'|'click' }" }, { status: 400 })
+   }
++
+   const senderEmail = extractSenderEmail(from)
+   if (!senderEmail) {
+     return NextResponse.json({ error: "Could not parse sender email" }, { status: 400 })
+   }
++
+   const field = signal === "up" ? "up" : signal === "down" ? "down" : "clicks"
++
+   try {
+     const ref = adminDb
+       .collection("users").doc(userEmail)
+diff --git a/app/api/gmail/route.ts b/app/api/gmail/route.ts
+index c1bd223..57cf344 100644
+--- a/app/api/gmail/route.ts
++++ b/app/api/gmail/route.ts
+@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
+ import { adminDb } from "@/lib/firebaseAdmin"
+ 
+ const GMAIL_FETCH_CONCURRENCY = 10
++const MAX_BODY_CHARS = 3000
+ 
+ async function mapWithConcurrency<T, R>(
+   items: T[],
+@@ -22,6 +23,35 @@ async function mapWithConcurrency<T, R>(
+   return results
+ }
+ 
++function decodeBase64Url(data: string): string {
++  return Buffer.from(data, "base64").toString("utf8")
++}
++
++// Walks a Gmail message payload (which can be arbitrarily nested multipart/*)
++// and pulls out the best plain-text representation it can find.
++function extractPlainTextBody(payload: any): string {
++  if (!payload) return ""
++  if (payload.mimeType === "text/plain" && payload.body?.data) {
++    return decodeBase64Url(payload.body.data)
++  }
++  if (payload.parts) {
++    const plainPart = payload.parts.find((p: any) => p.mimeType === "text/plain")
++    if (plainPart?.body?.data) return decodeBase64Url(plainPart.body.data)
++    for (const part of payload.parts) {
++      const nested = extractPlainTextBody(part)
++      if (nested) return nested
++    }
++    const htmlPart = payload.parts.find((p: any) => p.mimeType === "text/html")
++    if (htmlPart?.body?.data) {
++      return decodeBase64Url(htmlPart.body.data).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
++    }
++  }
++  if (payload.mimeType === "text/html" && payload.body?.data) {
++    return decodeBase64Url(payload.body.data).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
++  }
++  return ""
++}
++
+ export async function GET() {
+   const session = await getServerSession(authOptions)
+   if (!session) {
+@@ -37,14 +67,14 @@ export async function GET() {
+     return NextResponse.json({ error: "No access token" }, { status: 401 })
+   }
+ 
+-  const email = (session as any).user?.email
++  const userEmail: string | undefined = (session as any).user?.email
+   let isPro = false
+   let trialActive = false
+   let trialDaysLeft = 0
+ 
+-  if (email) {
++  if (userEmail) {
+     try {
+-      const userRef = adminDb.collection("users").doc(email)
++      const userRef = adminDb.collection("users").doc(userEmail)
+       const userDoc = await userRef.get()
+       if (!userDoc.exists) {
+         await userRef.set({
+@@ -104,20 +134,61 @@ export async function GET() {
+   }
+ 
+   const data = await res.json()
+-  const messageIds = data.messages || []
++  const messageIds: { id: string; threadId: string }[] = data.messages || []
++
++  // Gmail's messages.list returns newest-first, so the first message we see
++  // for a given thread is the most recent INBOX-labeled one in it. Threads
++  // often have several old inbound messages still tagged INBOX even after
++  // the user replied — collapsing to one row per thread avoids showing the
++  // same conversation multiple times.
++  const seenThreads = new Set<string>()
++  const dedupedMessages = messageIds.filter((m) => {
++    if (!m.threadId) return true
++    if (seenThreads.has(m.threadId)) return false
++    seenThreads.add(m.threadId)
++    return true
++  })
+ 
+   const emails = await mapWithConcurrency(
+-    messageIds,
++    dedupedMessages,
+     GMAIL_FETCH_CONCURRENCY,
+-    async (msg: any) => {
++    async (msg) => {
+       try {
++        // The INBOX label sticks to individual messages, not the thread as a
++        // whole — a thread the user already replied to can still surface an
++        // old inbound message here. Check who actually sent the LAST message
++        // in the thread (across all labels) before treating this as pending.
++        const threadRes = await fetch(
++          `https://gmail.googleapis.com/gmail/v1/users/me/threads/${msg.threadId}?format=metadata&metadataHeaders=From&metadataHeaders=Date`,
++          { headers: { Authorization: `Bearer ${accessToken}` } }
++        )
++        if (!threadRes.ok) {
++          console.error("GMAIL_THREAD_FETCH_FAILED", msg.threadId, threadRes.status)
++          return null
++        }
++        const threadData = await threadRes.json()
++        const threadMessages: any[] = threadData.messages || []
++        if (threadMessages.length === 0) return null
++
++        const lastMessage = threadMessages[threadMessages.length - 1]
++        const lastFrom: string = lastMessage.payload?.headers?.find((h: any) => h.name === "From")?.value || ""
++        const userSpokeLast = !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
++        if (userSpokeLast) {
++          // The user already has the last word in this thread — nothing pending.
++          return null
++        }
++
++        // Fetch the full content of the message that's actually awaiting a
++        // reply (usually msg.id, but if a newer inbound message landed after
++        // the list call, prefer the thread's true latest message).
++        const targetId = lastMessage.id || msg.id
+         const msgRes = await fetch(
+-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`,
++          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${targetId}?format=full`,
+           { headers: { Authorization: `Bearer ${accessToken}` } }
+         )
+         if (!msgRes.ok) {
+           const errBody = await msgRes.text()
+-          console.error("GMAIL_MESSAGE_FETCH_FAILED", msg.id, msgRes.status, errBody)
++          console.error("GMAIL_MESSAGE_FETCH_FAILED", targetId, msgRes.status, errBody)
+           return null
+         }
+         const msgData = await msgRes.json()
+@@ -126,7 +197,9 @@ export async function GET() {
+         const from = headers.find((h: any) => h.name === "From")?.value || "Unknown"
+         const date = headers.find((h: any) => h.name === "Date")?.value || null
+         const snippet = msgData.snippet || ""
+-        return { id: msg.id, subject, from, snippet, date, awaitingReply: false }
++        const body = extractPlainTextBody(msgData.payload).slice(0, MAX_BODY_CHARS)
++
++        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: true }
+       } catch (err) {
+         console.error("GMAIL_MESSAGE_FETCH_ERROR", msg.id, err)
+         return null
+diff --git a/app/api/gmail/send/route.ts b/app/api/gmail/send/route.ts
+deleted file mode 100644
+index dbdb1b0..0000000
+--- a/app/api/gmail/send/route.ts
++++ /dev/null
+@@ -1,57 +0,0 @@
+-import { getServerSession } from "next-auth"
+-import { authOptions } from "../../auth/[...nextauth]/route"
+-import { NextResponse } from "next/server"
+-
+-export async function POST(req: Request) {
+-  const session = await getServerSession(authOptions)
+-
+-  if (!session) {
+-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+-  }
+-
+-  if ((session as any).error === "RefreshAccessTokenError") {
+-    return NextResponse.json({ error: "Session expired, please sign in again" }, { status: 401 })
+-  }
+-
+-  const accessToken = (session as any).accessToken
+-
+-  if (!accessToken) {
+-    return NextResponse.json({ error: "No access token" }, { status: 401 })
+-  }
+-
+-  const { to, subject, message, threadId } = await req.json()
+-
+-  const emailLines = [
+-    `To: ${to}`,
+-    `Subject: ${subject}`,
+-    `Content-Type: text/plain; charset="UTF-8"`,
+-    ``,
+-    message,
+-  ]
+-
+-  const raw = Buffer.from(emailLines.join("\n"))
+-    .toString("base64")
+-    .replace(/\+/g, "-")
+-    .replace(/\//g, "_")
+-    .replace(/=+$/, "")
+-
+-  const res = await fetch(
+-    `https://gmail.googleapis.com/gmail/v1/users/me/messages/send`,
+-    {
+-      method: "POST",
+-      headers: {
+-        Authorization: `Bearer ${accessToken}`,
+-        "Content-Type": "application/json",
+-      },
+-      body: JSON.stringify({ raw, threadId }),
+-    }
+-  )
+-
+-  const data = await res.json()
+-
+-  if (!res.ok) {
+-    return NextResponse.json({ error: data }, { status: 500 })
+-  }
+-
+-  return NextResponse.json({ success: true })
+-}
+\ No newline at end of file
+diff --git a/app/api/notify/route.ts b/app/api/notify/route.ts
+index 64f8660..2c1e2b7 100644
+--- a/app/api/notify/route.ts
++++ b/app/api/notify/route.ts
+@@ -1,13 +1,21 @@
+ import { NextRequest, NextResponse } from "next/server"
+ import { Resend } from "resend"
++import crypto from "crypto"
+ import { adminDb } from "@/lib/firebaseAdmin"
+ 
+ const resend = new Resend(process.env.RESEND_API_KEY)
+ 
++function isAuthorizedCronRequest(request: NextRequest, cronSecret: string | undefined): boolean {
++  if (!cronSecret) return false
++  const authHeader = request.headers.get("authorization") || ""
++  const expected = `Bearer ${cronSecret}`
++  const authBuffer = Buffer.from(authHeader, "utf8")
++  const expectedBuffer = Buffer.from(expected, "utf8")
++  return authBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(authBuffer, expectedBuffer)
++}
++
+ export async function GET(request: NextRequest) {
+-  const authHeader = request.headers.get("authorization")
+-  const cronSecret = process.env.CRON_SECRET
+-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
++  if (!isAuthorizedCronRequest(request, process.env.CRON_SECRET)) {
+     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+   }
+ 
+diff --git a/app/api/webhook/lemonsqueezy/route.ts b/app/api/webhook/lemonsqueezy/route.ts
+index 9f84ca6..d8255db 100644
+--- a/app/api/webhook/lemonsqueezy/route.ts
++++ b/app/api/webhook/lemonsqueezy/route.ts
+@@ -35,7 +35,12 @@ export async function POST(req: NextRequest) {
+   }
+ 
+   const eventName = body.meta?.event_name
+-  const userEmail = body.data?.attributes?.user_email
++  // custom_data carries the email of the Veltro account that started checkout —
++  // set by the app itself, so it can't drift from what the customer types/edits
++  // into LemonSqueezy's checkout email field. Fall back to the checkout email
++  // for older links or purchases made outside the app's own checkout flow.
++  const userEmail: string | undefined =
++    body.meta?.custom_data?.user_email || body.data?.attributes?.user_email
+ 
+   if (!userEmail) {
+     return NextResponse.json({ error: "No email" }, { status: 400 })
+diff --git a/app/page.tsx b/app/page.tsx
+index 1d27147..6c0a4a8 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -47,7 +47,8 @@ const formatEmailDate = (dateStr: string | null) => {
+   return date.toLocaleDateString([], { month: "short", day: "numeric", year: sameYear ? undefined : "numeric" }) + `, ${time}`;
+ };
+ 
+-const gmailLink = (id: string) => `https://mail.google.com/mail/u/0/#all/${id}`;
++// Opens a ready-to-type Gmail compose window with the recipient already filled in.
++const gmailReplyLink = (senderEmail: string) => `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(senderEmail)}`;
+ 
+ export default function Home() {
+   const { data: session } = useSession();
+@@ -102,9 +103,10 @@ export default function Home() {
+     sendFeedback(email.from, signal);
+   };
+ 
+-  const openInGmail = (email: any) => {
++  const replyInGmail = (email: any) => {
+     sendFeedback(email.from, "click");
+-    window.open(gmailLink(email.id), "_blank", "noopener,noreferrer");
++    const { email: senderEmail } = parseSender(email.from);
++    window.open(gmailReplyLink(senderEmail), "_blank", "noopener,noreferrer");
+   };
+ 
+   useEffect(() => {
+@@ -181,7 +183,19 @@ export default function Home() {
+         setAnalysisProgress(prog);
+       }, 200);
+ 
+-      const emailTexts = fetched.map((email: any) => `Subject: ${email.subject}\nFrom: ${email.from}\n\n${email.snippet}`);
++      const emailTexts = fetched.map((email: any) => {
++        const received = email.date ? new Date(email.date) : null;
++        const validDate = received && !isNaN(received.getTime());
++        const hoursAgo = validDate ? Math.floor((Date.now() - received.getTime()) / 3600000) : null;
++        const receivedLine = hoursAgo === null
++          ? ""
++          : hoursAgo < 1
++            ? "Received: just now. The user has not replied yet.\n"
++            : hoursAgo < 48
++              ? `Received: ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago. The user has not replied yet.\n`
++              : `Received: ${Math.floor(hoursAgo / 24)} day${Math.floor(hoursAgo / 24) === 1 ? "" : "s"} ago. The user has not replied yet.\n`;
++        return `Subject: ${email.subject}\nFrom: ${email.from}\n${receivedLine}\n${email.body || email.snippet}`;
++      });
+       const analysisRes = await fetch("/api/analyze", {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+@@ -250,7 +264,18 @@ export default function Home() {
+ 
+   const sortedAtRisk = [...atRiskEmails].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
+ 
++  const elapsedLabel = (email: any) => {
++    if (!email.date) return null;
++    const received = new Date(email.date);
++    if (isNaN(received.getTime())) return null;
++    const hours = Math.floor((Date.now() - received.getTime()) / 3600000);
++    if (hours < 1) return "JUST NOW";
++    if (hours < 24) return `${hours}H`;
++    return `${Math.floor(hours / 24)}D`;
++  };
++
+   const renderRiskBadge = (email: any) => {
++    const elapsed = elapsedLabel(email);
+     if (email.deadline && email.awaitingReply) return (
+       <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.2)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE + NO REPLY</span>
+     );
+@@ -258,7 +283,7 @@ export default function Home() {
+       <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.15)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>DEADLINE</span>
+     );
+     if (email.awaitingReply) return (
+-      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,159,39,0.15)", color: "#EF9F27", fontWeight: 700, letterSpacing: "0.05em" }}>NO REPLY 48H</span>
++      <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(239,159,39,0.15)", color: "#EF9F27", fontWeight: 700, letterSpacing: "0.05em" }}>NO REPLY{elapsed ? ` · ${elapsed}` : ""}</span>
+     );
+     return <span style={{ fontSize: "0.65rem", padding: "2px 7px", borderRadius: "4px", background: "rgba(226,75,74,0.12)", color: "#E24B4A", fontWeight: 700, letterSpacing: "0.05em" }}>HIGH RISK</span>;
+   };
+@@ -307,12 +332,12 @@ export default function Home() {
+               )}
+               {email.id && (
+                 <button
+-                  onClick={e => { e.stopPropagation(); openInGmail(email); }}
+-                  title="Open in Gmail"
++                  onClick={e => { e.stopPropagation(); replyInGmail(email); }}
++                  title="Reply in Gmail"
+                   style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "20px", height: "20px", padding: 0, border: "none", borderRadius: "4px", background: "transparent", cursor: "pointer", flexShrink: 0 }}
+                 >
+                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={d.textFaint} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
++                    <polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/>
+                   </svg>
+                 </button>
+               )}
+@@ -418,11 +443,11 @@ export default function Home() {
+               </div>
+               {email.id && (
+                 <button
+-                  onClick={() => openInGmail(email)}
++                  onClick={() => replyInGmail(email)}
+                   style={{ fontSize: "0.75rem", color: "#7F77DD", background: "transparent", border: "none", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 500, display: "flex", alignItems: "center", gap: "4px" }}
+                 >
+-                  Open in Gmail
+-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
++                  Reply in Gmail
++                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#7F77DD" strokeWidth="2.5"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                 </button>
+               )}
+             </div>
+@@ -605,6 +630,13 @@ export default function Home() {
+     );
+   }
+ 
++  // Ties the checkout to the signed-in account: prefills the email (convenience)
++  // and passes it as custom data, which LemonSqueezy echoes back on the webhook
++  // regardless of what the customer types/edits in the checkout email field —
++  // otherwise a mismatched checkout email leaves a paying customer stuck on Free.
++  const accountEmail = session.user?.email || "";
++  const checkoutUrl = `https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8?checkout[email]=${encodeURIComponent(accountEmail)}&checkout[custom][user_email]=${encodeURIComponent(accountEmail)}`;
++
+   /* ─── APP ─── */
+   return (
+     <>
+@@ -917,7 +949,7 @@ export default function Home() {
+                   </div>
+                 ))}
+               </div>
+-              <a href="https://veltro.lemonsqueezy.com/checkout/buy/516e106c-4b5a-42eb-8a08-a209c900c5d8" target="_blank" rel="noopener noreferrer"
++              <a href={checkoutUrl} target="_blank" rel="noopener noreferrer"
+                 style={{ display: "block", width: "100%", padding: "0.7rem", background: "linear-gradient(135deg, #534AB7, #7F77DD)", color: "#fff", border: "none", borderRadius: "10px", fontSize: "0.88rem", fontWeight: 600, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", textAlign: "center", textDecoration: "none", boxShadow: "0 4px 20px rgba(83,74,183,0.35)" }}>
+                 Upgrade — NZ$29.99/mo
+               </a>
+diff --git a/app/track/route.ts b/app/track/route.ts
+index d461468..ce04947 100644
+--- a/app/track/route.ts
++++ b/app/track/route.ts
+@@ -1,13 +1,19 @@
+ import { NextRequest, NextResponse } from "next/server"
+ import { adminDb } from "@/lib/firebaseAdmin"
+ 
++const ALLOWED_EVENTS = new Set(["google_click"])
++
+ export async function POST(request: NextRequest) {
+   try {
+     const body = await request.json()
++    if (typeof body.event !== "string" || !ALLOWED_EVENTS.has(body.event)) {
++      return NextResponse.json({ success: false }, { status: 400 })
++    }
++    const timestamp = new Date(body.timestamp)
+     await adminDb.collection("events").add({
+       type: body.event,
+-      timestamp: body.timestamp,
+-      userAgent: request.headers.get("user-agent") || "unknown",
++      timestamp: isNaN(timestamp.getTime()) ? new Date().toISOString() : timestamp.toISOString(),
++      userAgent: (request.headers.get("user-agent") || "unknown").slice(0, 300),
+     })
+     return NextResponse.json({ success: true })
+   } catch {
+diff --git a/lib/firebase.ts b/lib/firebase.ts
+deleted file mode 100644
+index 8e625d7..0000000
+--- a/lib/firebase.ts
++++ /dev/null
+@@ -1,14 +0,0 @@
+-import { initializeApp, getApps } from "firebase/app"
+-import { getFirestore } from "firebase/firestore"
+-
+-const firebaseConfig = {
+-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+-}
+-
+-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig)
+-export const db = getFirestore(app)
+-- 
+2.43.0
+

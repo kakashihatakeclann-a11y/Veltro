@@ -1,0 +1,107 @@
+diff --git a/app/api/gmail/route.ts b/app/api/gmail/route.ts
+index 57cf344..cc03753 100644
+--- a/app/api/gmail/route.ts
++++ b/app/api/gmail/route.ts
+@@ -173,15 +173,22 @@ export async function GET() {
+         const lastMessage = threadMessages[threadMessages.length - 1]
+         const lastFrom: string = lastMessage.payload?.headers?.find((h: any) => h.name === "From")?.value || ""
+         const userSpokeLast = !!userEmail && lastFrom.toLowerCase().includes(userEmail.toLowerCase())
++        // The user had the last word: the contact has gone quiet. Nothing will
++        // ever arrive to remind them about these, which is why they get missed.
++        let daysSilent = 0
+         if (userSpokeLast) {
+-          // The user already has the last word in this thread — nothing pending.
+-          return null
++          const repliedAt = new Date(lastMessage.payload?.headers?.find((h: any) => h.name === "Date")?.value || "")
++          if (isNaN(repliedAt.getTime())) return null
++          daysSilent = Math.floor((Date.now() - repliedAt.getTime()) / 86400000)
++          if (daysSilent < 3 || daysSilent > 90) return null
+         }
+ 
+         // Fetch the full content of the message that's actually awaiting a
+         // reply (usually msg.id, but if a newer inbound message landed after
+         // the list call, prefer the thread's true latest message).
+-        const targetId = lastMessage.id || msg.id
++        // For a gone-quiet thread the last message is the user's own reply, so
++        // load the inbound one instead — that's what the contact actually wanted.
++        const targetId = userSpokeLast ? msg.id : (lastMessage.id || msg.id)
+         const msgRes = await fetch(
+           `https://gmail.googleapis.com/gmail/v1/users/me/messages/${targetId}?format=full`,
+           { headers: { Authorization: `Bearer ${accessToken}` } }
+@@ -199,7 +206,7 @@ export async function GET() {
+         const snippet = msgData.snippet || ""
+         const body = extractPlainTextBody(msgData.payload).slice(0, MAX_BODY_CHARS)
+ 
+-        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: true }
++        return { id: targetId, threadId: msg.threadId, subject, from, snippet, body, date, awaitingReply: !userSpokeLast, goneQuiet: userSpokeLast, daysSilent }
+       } catch (err) {
+         console.error("GMAIL_MESSAGE_FETCH_ERROR", msg.id, err)
+         return null
+diff --git a/app/page.tsx b/app/page.tsx
+index 6c0a4a8..c73aa5e 100644
+--- a/app/page.tsx
++++ b/app/page.tsx
+@@ -235,14 +235,18 @@ export default function Home() {
+   const presentTags = Array.from(new Set(emails.map(e => e.contactType).filter(t => t && t !== "Other"))) as string[];
+   const visibleEmails = tagFilter === "All" ? emails : emails.filter(e => e.contactType === tagFilter);
+ 
++  // Gone-quiet threads get their own section, so keep them out of the triage
++  // lists below — otherwise the same client shows up twice.
++  const inboxEmails = visibleEmails.filter(e => !e.goneQuiet);
++
+   const grouped = {
+-    "Important":     visibleEmails.filter(e => e.category === "Important"),
+-    "Action Needed": visibleEmails.filter(e => e.category === "Action Needed"),
+-    "Other":         visibleEmails.filter(e => !e.category || e.category === "Other"),
++    "Important":     inboxEmails.filter(e => e.category === "Important"),
++    "Action Needed": inboxEmails.filter(e => e.category === "Action Needed"),
++    "Other":         inboxEmails.filter(e => !e.category || e.category === "Other"),
+   };
+ 
+   const totalTasks = visibleEmails.reduce((acc, e) => acc + (e.tasks?.length || 0), 0);
+-  const allAtRiskEmails = visibleEmails.filter(e => e.riskLevel === "high");
++  const allAtRiskEmails = inboxEmails.filter(e => e.riskLevel === "high");
+   const atRiskEmails = isPro ? allAtRiskEmails : allAtRiskEmails.slice(0, FREE_AT_RISK_LIMIT);
+   const atRiskHidden = isPro ? 0 : Math.max(0, allAtRiskEmails.length - FREE_AT_RISK_LIMIT);
+   const awaitingCount = visibleEmails.filter(e => e.awaitingReply).length;
+@@ -264,6 +268,14 @@ export default function Home() {
+ 
+   const sortedAtRisk = [...atRiskEmails].sort((a, b) => getUrgencyScore(b) - getUrgencyScore(a));
+ 
++  // Clients who went quiet after the user replied. Nothing arrives to remind
++  // you about these, so they're the ones that quietly cost deals. "Other" means
++  // the analyzer judged the thread finished or automated — those would bury the
++  // ones that matter.
++  const goneQuietEmails = visibleEmails
++    .filter(e => e.goneQuiet && e.category && e.category !== "Other")
++    .sort((a, b) => (b.daysSilent || 0) - (a.daysSilent || 0));
++
+   const elapsedLabel = (email: any) => {
+     if (!email.date) return null;
+     const received = new Date(email.date);
+@@ -856,6 +868,24 @@ export default function Home() {
+                 </div>
+               )}
+ 
++              {goneQuietEmails.length > 0 && (
++                <div style={{ marginBottom: "2rem" }}>
++                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
++                    <div style={{ width: "5px", height: "5px", borderRadius: "50%", background: "#E24B4A", animation: "pulse-dot 2s ease infinite" }} />
++                    <span style={{ fontSize: "0.67rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: "#E24B4A" }}>Gone Quiet</span>
++                    <span style={{ fontSize: "0.67rem", color: "#E24B4A", background: "rgba(226,75,74,0.1)", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>{goneQuietEmails.length}</span>
++                  </div>
++                  {goneQuietEmails.map((email, i) => (
++                    <div key={`gq-${i}`} style={{ marginBottom: "6px" }}>
++                      <div style={{ fontSize: "0.6rem", fontWeight: 700, color: "#E24B4A", letterSpacing: "0.06em", marginBottom: "2px" }}>
++                        SILENT {email.daysSilent} DAY{email.daysSilent === 1 ? "" : "S"}
++                      </div>
++                      {renderEmailCard(email, i, true)}
++                    </div>
++                  ))}
++                </div>
++              )}
++
+               {sortedAtRisk.length > 0 && (
+                 <div style={{ marginBottom: "2rem" }}>
+                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "0.7rem", paddingBottom: "0.5rem", borderBottom: `1px solid ${d.divider}` }}>
+
