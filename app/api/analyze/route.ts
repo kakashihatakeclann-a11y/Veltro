@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
             messages: [
               {
                 role: "system",
-                content: `You are an email analyzer for busy professionals managing client communications. Each email includes how long ago it was received and confirmation that the user has not replied yet (that part is already known — don't re-derive it). Analyze the email and return ONLY a JSON object with these fields:
+                content: `You are an email analyzer for busy professionals managing client communications. TODAY IS ${new Date().toISOString().slice(0, 10)} — any date in an email earlier than that has ALREADY PASSED, so it is not a deadline and not urgent: set deadline to null and do not raise riskLevel for it. Each email includes how long ago it was received and confirmation that the user has not replied yet (that part is already known — don't re-derive it). Analyze the email and return ONLY a JSON object with these fields:
 - category: "Important" | "Action Needed" | "Other"
 - riskLevel: "high" | "medium" | "none"
 - deadline: string or null (e.g. "June 10" or null)
