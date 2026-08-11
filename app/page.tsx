@@ -194,7 +194,8 @@ export default function Home() {
             : hoursAgo < 48
               ? `Received: ${hoursAgo} hour${hoursAgo === 1 ? "" : "s"} ago. The user has not replied yet.\n`
               : `Received: ${Math.floor(hoursAgo / 24)} day${Math.floor(hoursAgo / 24) === 1 ? "" : "s"} ago. The user has not replied yet.\n`;
-        return `Subject: ${email.subject}\nFrom: ${email.from}\n${receivedLine}\n${email.body || email.snippet}`;
+        const stateLine = email.goneQuiet ? `The user ALREADY REPLIED to this thread ${email.daysSilent} day(s) ago and the contact has not come back since. The user owes nothing here.\n` : receivedLine;
+        return `Subject: ${email.subject}\nFrom: ${email.from}\n${stateLine}\n${email.body || email.snippet}`;
       });
       const analysisRes = await fetch("/api/analyze", {
         method: "POST",
